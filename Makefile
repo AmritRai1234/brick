@@ -1,4 +1,4 @@
-.PHONY: build test fmt fmt-check vet clean examples native diff interp selfhost selfhost-e2e bootstrap backup bench
+.PHONY: build test fmt fmt-check vet clean examples native diff interp selfhost selfhost-e2e bootstrap backup bench bench-server
 
 build:
 	go build -o bin/brick ./cmd/brick
@@ -174,6 +174,11 @@ bootstrap: build
 # RUNS=n changes the sample count; PIN=<core> changes the core they are pinned to.
 bench: build
 	python3 bench/run.py
+
+# A very small HTTP server in Brick, C, Go and Rust, measured with ab.
+# RUNS=n rounds, CONNS=n concurrent connections, REQUESTS=n per round.
+bench-server: build
+	python3 bench/server/run.py
 
 # Write a single-file backup of the whole repo (all branches and tags) to
 # ../brick-backups. Restore with:  git clone <file>.bundle brick

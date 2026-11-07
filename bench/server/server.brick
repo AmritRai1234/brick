@@ -1,0 +1,77 @@
+// A very small HTTP/1.1 server, written in Brick.
+//
+// The socket syscalls live in this program's companion C file (server.c):
+// listening, accepting, reading, writing and closing a connection. Everything
+// above them is Brick -- the accept loop, finding the end of the request line,
+// checking the method, picking the response. The point of bench/server is to
+// see how many requests per second that costs compared with the same server in
+// C, Go and Rust.
+//
+// Build:
+//   ./bin/brick build bench/server/server.brick -o bench/server/build/brick-server
+// Run (PORT defaults to 18080):
+//   PORT=18080 ./bench/server/build/brick-server
+
+extern function srv_port() -> int
+extern function srv_listen(port: int) -> int
+extern function srv_accept(fd: int) -> int
+extern function srv_read(cfd: int) -> text
+extern function srv_send(cfd: int, data: text) -> int
+extern function srv_close(cfd: int) -> int
+
+const okResponse = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 14\r\nConnection: close\r\n\r\nHello, Brick!\n"
+const badResponse = "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: 4\r\nConnection: close\r\n\r\nnope"
+
+// requestLine returns the bytes before the first CR, exactly as the other
+// three servers do it: one scan, one slice.
+function requestLine(req: text) -> text {
+    var n = req.len
+    var i = 0
+    while i < n {
+        if req[i] == 13 {
+            return slice(req, 0, i)
+        }
+        if req[i] == 0 {
+            return slice(req, 0, i)
+        }
+        i = i + 1
+    }
+    return req
+}
+
+function startsWith(s: text, prefix: text) -> bool {
+    if s.len < prefix.len {
+        return false
+    }
+    return slice(s, 0, prefix.len) == prefix
+}
+
+// One request per connection: read, answer, close.
+function handle(cfd: int) {
+    var req = srv_read(cfd)
+    var line = requestLine(req)
+    if startsWith(line, "GET ") {
+        srv_send(cfd, okResponse)
+    } else {
+        srv_send(cfd, badResponse)
+    }
+    srv_close(cfd)
+}
+
+function main() {
+    var fd = srv_listen(srv_port())
+    if fd < 0 {
+        eprint("brick-server: cannot listen")
+        exit(1)
+    }
+    eprint("brick-server: listening")
+    var running = true
+    while running {
+        var cfd = srv_accept(fd)
+        if cfd < 0 {
+            running = false
+        } else {
+            handle(cfd)
+        }
+    }
+}

@@ -41,7 +41,8 @@ compiler with `BRICK_CC=clang`.
 
 `make bench` runs the same three workloads written in Brick, C, C++ and Rust and
 reports their timings side by side; see `bench/README.md` for the numbers and
-what they show.
+what they show. `make bench-server` does the same for a very small HTTP server
+(Brick, C, Go, Rust) under ApacheBench; see `bench/server/README.md`.
 
 Every stage can be inspected — a deliberate design goal ("stage dump flag.
 Print tokens, tree, core form and output so nothing is hidden").
@@ -351,6 +352,7 @@ internal/lsp/        language server (JSON-RPC over stdio)
 docs/SPEC.md        the language design notes
 examples/           runnable Brick programs
 bench/              the same three workloads in Brick, C, C++ and Rust (make bench)
+bench/server/       a very small HTTP server in Brick, C, Go and Rust (make bench-server)
 AGENTS.md           working notes for AI agents: rules, commands, debugging playbook
 .agents/skills/brick-lang/  the same as a loadable skill, plus verify.sh (the gate)
 ```
@@ -455,7 +457,8 @@ away:
 | `v0.3.23` | `read_dir` / `is_dir`; `brickc` links `extern` companion C files |
 | `v0.3.24` | `builder.add(to_text(n))` appends digits straight into the buffer; `to_text` for ints no longer uses `snprintf` |
 | `v0.3.25` | `AGENTS.md` + the `brick-lang` agent skill: invariants, verification ladder, debugging playbook |
-| `v0.3.26` | self-hosted compiler is linear again: cache `text.len` in the scanner, stop slicing the source per token (~70x on large inputs) (current) |
+| `v0.3.26` | self-hosted compiler is linear again: cache `text.len` in the scanner, stop slicing the source per token (~70x on large inputs) |
+| `v0.3.27` | four-way HTTP server benchmark (`make bench-server`): Brick matches hand-written C at ~20–26 µs of CPU per request; Go ~1.6–2.2x, Rust ~1.1–1.3x (current) |
 
 ```sh
 git tag                     # list the tags

@@ -3,3 +3,4 @@
 *.out
 out.c
 bench/build/
+bench/server/build/
