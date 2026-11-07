@@ -5,14 +5,16 @@
 // stages that were verified separately against `brick tokdump`, `brick ast`,
 // `brick typedump` and `brick emit`, now wired into one command.
 //
-// Brick cannot spawn a process yet, so brickc stops at C: it writes the
-// generated C to a file (default: the input name with a .c extension). Compile
-// that C with cc, exactly as the Go compiler does, to get an executable.
+// With -o naming a file that does not end in .c, brickc goes all the way: it
+// writes <output>.c and then runs the C compiler itself (via system), so one
+// command turns Brick source into a runnable program. The C compiler is $BRICK_CC
+// when set, "cc" otherwise -- the same rule the Go-built `brick` uses.
 //
 // Usage:
 //   brick run selfhost/brickc.brick <input.brick>            # write <input>.c
 //   brick run selfhost/brickc.brick <input.brick> -o out.c   # write out.c
 //   brick run selfhost/brickc.brick <input.brick> -o -       # print to stdout
+//   brick run selfhost/brickc.brick <input.brick> -o prog    # build prog
 
 import "frontend.brick"
 import "codegen.brick"
@@ -32,6 +34,23 @@ function cName(path: text) -> text {
         return path + ".c"
     }
     return slice(path, 0, dot) + ".c"
+}
+
+// endsWith reports whether s ends with tail.
+function endsWith(s: text, tail: text) -> bool {
+    if tail.len > s.len {
+        return false
+    }
+    return slice(s, s.len - tail.len, s.len) == tail
+}
+
+// ccName is the C compiler brickc runs: $BRICK_CC, or "cc".
+function ccName() -> text {
+    var cc = getenv("BRICK_CC")
+    if cc.len == 0 {
+        return "cc"
+    }
+    return cc
 }
 
 function main() {
@@ -74,8 +93,30 @@ function main() {
 
     if output == "-" {
         print(slice(s, 0, s.len - 1))
-    } else {
+        return
+    }
+    // -o out.c writes C; -o out writes out.c and then builds out.
+    if endsWith(output, ".c") {
         write_file(output, s)
         eprint("brickc: wrote " + output)
+        return
     }
+    var cfile = output + ".c"
+    write_file(cfile, s)
+    var cc = ccName()
+    var cmd = List(text)
+    cmd.push(cc)
+    cmd.push("-std=c11")
+    cmd.push("-O2")
+    cmd.push("-Wall")
+    cmd.push("-Wno-unused-parameter")
+    cmd.push(cfile)
+    cmd.push("-o")
+    cmd.push(output)
+    var status = system(cmd)
+    if status != 0 {
+        eprint("brickc: " + cc + " failed with status " + to_text(status))
+        exit(1)
+    }
+    eprint("brickc: wrote " + cfile + " and built " + output)
 }

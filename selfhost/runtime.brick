@@ -12,6 +12,10 @@ function argsRuntimeText() -> text {
     return "/*\n * Command-line arguments, captured by main and exposed as args().\n */\n\nstatic int    brick_saved_argc;\nstatic char **brick_saved_argv;\n\nstatic inline BrickList brick_args(void)\n{\n    BrickList   list;\n    int         i;\n    const char *arg;\n\n    list = brick_list_new(sizeof(const char *));\n    for (i = 0; i < brick_saved_argc; i++) {\n        arg = brick_saved_argv[i];\n        brick_list_push(&list, &arg);\n    }\n    return list;\n}\n\n"
 }
 
+function getenvRuntimeText() -> text {
+    return "/*\n * Environment variables: getenv(name) returns \"\" when the name is not set.\n */\n\nstatic inline const char *brick_getenv(const char *name)\n{\n    const char *value = getenv(name);\n\n    return value != NULL ? value : \"\";\n}\n\n"
+}
+
 function systemRuntimeText() -> text {
     return "/*\n * Running a program: system(argv) starts argv[0] with the remaining\n * arguments, waits for it, and returns its exit status. No shell is\n * involved, so arguments arrive exactly as written.\n */\n\n#include <sys/types.h>\n#include <sys/wait.h>\n#include <unistd.h>\n\nstatic inline int64_t brick_run(BrickList argv)\n{\n    char   **vec;\n    int64_t  i;\n    pid_t    pid;\n    int      status;\n\n    if (argv.len == 0) {\n        return 127;\n    }\n    fflush(stdout);\n    fflush(stderr);\n    vec = brick_alloc(sizeof(char *) * (size_t)(argv.len + 1));\n    for (i = 0; i < argv.len; i++) {\n        vec[i] = *(char **)((char *)argv.data + i * argv.elem);\n    }\n    vec[argv.len] = NULL;\n\n    pid = fork();\n    if (pid < 0) {\n        return 127;\n    }\n    if (pid == 0) {\n        execvp(vec[0], vec);\n        _exit(127);   /* exec failed: no such program */\n    }\n    if (waitpid(pid, &status, 0) < 0) {\n        return 127;\n    }\n    if (WIFEXITED(status)) {\n        return (int64_t)WEXITSTATUS(status);\n    }\n    if (WIFSIGNALED(status)) {\n        return (int64_t)(128 + WTERMSIG(status));\n    }\n    return 127;\n}\n\n"
 }

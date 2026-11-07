@@ -41,18 +41,27 @@ the program behaves the same as one built by the Go compiler.
 
 `brickc.brick` is the whole pipeline as one program — lex, parse, resolve
 imports, check, emit — the same stages the separate components verify, wired
-into one command. It writes the generated C to a file (default: the input name
-with a `.c` extension); handing that C to a C compiler is the next step, now
-that `system(argv)` lets a Brick program start one (see below).
+into one command. When `-o` names a file that ends in `.c` it stops at C; when
+it names anything else it writes `<output>.c` and then runs the C compiler
+itself, using `system(argv)` (see below). The C compiler is `$BRICK_CC`, or
+`cc`, exactly like the Go-built driver.
 
 ```sh
 brick run selfhost/brickc.brick examples/hello.brick           # writes examples/hello.c
 brick run selfhost/brickc.brick examples/hello.brick -o out.c  # writes out.c
 brick run selfhost/brickc.brick examples/hello.brick -o -      # prints to stdout
+brick run selfhost/brickc.brick examples/hello.brick -o hello  # writes hello.c and builds hello
 ```
 
+One gap remains, and it is the driver rather than the compiler: a program that
+declares `extern` functions links against companion C files (`foo.c` or
+`foo.d/*.c`), which needs a directory read Brick does not have. `brickc` does
+not pass them to the C compiler, so `examples/extern.brick` is still built by
+the Go driver.
+
 The two drivers share the emit machinery in `codegen.brick`: `emitter.brick`
-prints to stdout (for the `brick emit` diff), `brickc.brick` writes a file.
+prints to stdout (for the `brick emit` diff), `brickc.brick` writes a file and,
+when asked for an executable, runs the C compiler on it.
 
 ## Layout
 
@@ -132,6 +141,7 @@ over both sets.
 | Single compiler (`brickc`) | done — source in, C out; matches `brick emit` on every input and compiles and runs like the Go compiler's |
 | Bootstrap | done — `make bootstrap`: stage 1 (Go-built) compiles `brickc.brick` into stage 2, stage 2 into stage 3; all stages emit identical C and stage 2 = stage 3 |
 | Diagnostics | done — stops at the first error, in the same words as the Go front end, and exits non-zero without emitting C; diffed against `brick errdump` over `testdata/errors/` |
+| Self-driven build | done — `brickc prog.brick -o prog` emits C and runs the C compiler itself (`make selfhost-e2e`, `make bootstrap`); `extern` companion C files are the one gap |
 
 ## Diagnostics
 
@@ -153,7 +163,7 @@ program is clean). `make selfhost` diffs it against the parser, checker, emitter
 and `brickc` over `testdata/errors/parse/` (parse errors) and
 `testdata/errors/check/` (type errors).
 
-## Running programs: `system(argv)`
+## Running programs: `system(argv)` and `getenv(name)`
 
 A compiler that cannot start another program cannot link what it emits, so
 Brick has `system(argv: List(text)) -> int`: it starts `argv[0]` with the
@@ -167,6 +177,11 @@ output order matches), and the interpreter uses `os/exec` with the same rules.
 Both are gated: a program that never calls `system` emits exactly the C it did
 before. `examples/system.brick` exercises the success, failure and
 not-found cases, and `make diff` checks the interpreter and the binary agree.
+
+`getenv(name)` returns a variable's value, or `""` when it is not set — never a
+NUL pointer, so `getenv("UNSET").len` is always safe. `brickc` uses it to honour
+`$BRICK_CC` when choosing the C compiler. `examples/env.brick` covers both the
+set and unset cases.
 
 ## Bootstrapping
 
@@ -182,6 +197,11 @@ checks that every stage emits the same C for every example and every
 `selfhost/*.brick`, and that the C stage 2 and stage 3 emit from the same
 source is byte-identical — the fixpoint that says the self-hosted compiler is
 complete enough to rebuild itself exactly.
+
+The last step is the payoff of `system(argv)`: stage 2 builds *itself* into a
+running binary (`brickc-self`, invoking `cc` on its own output), and that
+self-built compiler then builds `examples/hello.brick` into a program that
+runs — the whole chain from source to executable, with no Go code involved.
 
 ## Building a component by hand
 

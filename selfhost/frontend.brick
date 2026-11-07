@@ -1462,6 +1462,17 @@ function inferCall(c: &mut Checker, idx: int) -> text {
         }
         return "int"
     }
+    if nm == "getenv" {
+        if n.args.len != 1 {
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": getenv takes exactly 1 argument (a name), got " + to_text(n.args.len))
+            return "text"
+        }
+        var gt = infer(c, n.args[0])
+        if gt != "text" {
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": getenv name must be text, got " + gt)
+        }
+        return "text"
+    }
     if nm == "read_file" {
         infer(c, n.args[0])
         return "text"

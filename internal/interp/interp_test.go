@@ -315,3 +315,17 @@ func TestSystemBuiltin(t *testing.T) {
 		t.Fatalf("got %q, want statuses 0, 1, 127", got)
 	}
 }
+
+func TestGetenvBuiltin(t *testing.T) {
+	t.Setenv("BRICK_TEST_VAR", "value")
+	out, err := runInterp(t, `function main() {
+    print(getenv("BRICK_TEST_VAR"))
+    print(getenv("BRICK_TEST_UNSET_VAR").len)
+}`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := strings.TrimRight(out, "\n"); got != "value\n0" {
+		t.Fatalf("got %q, want \"value\" and 0", got)
+	}
+}

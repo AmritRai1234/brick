@@ -400,3 +400,18 @@ func TestSystemCodegen(t *testing.T) {
 		t.Errorf("system runtime should be omitted:\n%s", plain)
 	}
 }
+
+func TestGetenvCodegen(t *testing.T) {
+	out := gen(t, `function main() { print(getenv("HOME")) }`)
+	for _, want := range []string{
+		"return value != NULL ? value : \"\";",
+		"brick_getenv(\"HOME\")",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q\n%s", want, out)
+		}
+	}
+	if plain := gen(t, `function main() { print(1) }`); strings.Contains(plain, "brick_getenv") {
+		t.Errorf("getenv runtime should be omitted:\n%s", plain)
+	}
+}

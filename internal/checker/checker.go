@@ -775,6 +775,16 @@ func (c *Checker) inferCall(ex *ast.CallExpr) ast.Type {
 		}
 		return intT
 	}
+	// getenv(name): an environment variable, or "" when it is not set.
+	if id.Name == "getenv" {
+		if len(ex.Args) != 1 {
+			c.errorf(ex, "getenv takes exactly 1 argument (a name), got %d", len(ex.Args))
+		}
+		if at := c.infer(ex.Args[0]); !at.Equals(textT) {
+			c.errorf(ex, "getenv name must be text, got %s", at)
+		}
+		return textT
+	}
 	if id.Name == "read_file" {
 		if len(ex.Args) != 1 {
 			c.errorf(ex, "read_file takes exactly 1 argument (a path), got %d", len(ex.Args))

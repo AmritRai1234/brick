@@ -441,3 +441,18 @@ func TestSystemBuiltin(t *testing.T) {
 		}
 	}
 }
+
+func TestGetenvBuiltin(t *testing.T) {
+	if _, err := check(t, `function main() { print(getenv("HOME")) }`); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, src := range []string{
+		`function main() { getenv() }`,
+		`function main() { getenv(1) }`,
+		`function main() { getenv("A", "B") }`,
+	} {
+		if _, err := check(t, src); err == nil {
+			t.Errorf("want an error for: %s", src)
+		}
+	}
+}

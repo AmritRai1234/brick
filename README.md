@@ -302,7 +302,12 @@ Mapped to the roadmap in the spec (§15):
       gap was the driver: a compiler that cannot start another program cannot
       link what it emits, so `system(argv)` now runs a program with exact
       arguments and returns its exit status — the piece the self-hosted
-      compiler needs to hand its C to a C compiler.
+      compiler needs to hand its C to a C compiler. It does: `brickc prog.brick
+      -o prog` writes the C and then runs `$BRICK_CC` (or `cc`) on it, so one
+      self-hosted command turns Brick source into a working executable, and
+      `make bootstrap` checks that the compiler it just built can build itself
+      again *and* link a program that runs. Only `extern` companion C files are
+      left for the Go driver, because listing `foo.d/*.c` needs a directory read.
 
 ### Semantics enforced by the checker
 
@@ -382,6 +387,7 @@ Brick-written compiler would need.
 - `system(argv)` — run another program with `List(text)` arguments, no shell in
   between, and get its exit status (`127` when it cannot be started); this is
   what lets a Brick program drive a C compiler
+- `getenv(name)` — an environment variable, `""` when it is not set
 
 With those in place, every box in the audit is ticked: Brick can express a
 lexer, a parser, symbol tables, type checking and a C emitter. The roadmap's
@@ -431,7 +437,8 @@ away:
 | `v0.3.18` | `print_bytes`; byte-exact AST dump and emitter on `\0` literals |
 | `v0.3.19` | bootstrap: the self-hosted compiler compiles itself (identical C, stage 2 = stage 3) |
 | `v0.3.20` | `exit(status)`; `brick errdump`; self-hosted diagnostics match the Go compiler |
-| `v0.3.21` | `system(argv)`: run a program without a shell and read its exit status (current) |
+| `v0.3.21` | `system(argv)`: run a program without a shell and read its exit status |
+| `v0.3.22` | `getenv`; the self-hosted compiler builds and links programs by itself (current) |
 
 ```sh
 git tag                     # list the tags

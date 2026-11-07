@@ -735,6 +735,12 @@ func (in *interp) evalCall(ex *ast.CallExpr, env *Env) (Value, error) {
 				return nil, &RuntimeError{Msg: "exit status must be int", Line: ex.Line, Col: ex.Col}
 			}
 			return nil, &ExitError{Code: int(code)}
+		case "getenv":
+			name, err := in.textArg(ex.Args[0], env)
+			if err != nil {
+				return nil, err
+			}
+			return os.Getenv(name), nil
 		case "read_file":
 			p, err := in.textArg(ex.Args[0], env)
 			if err != nil {

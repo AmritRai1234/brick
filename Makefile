@@ -135,7 +135,17 @@ selfhost-e2e: selfhost
 		fi; \
 	done; \
 	if [ $$fail -ne 0 ]; then echo "self-host end-to-end FAILED"; exit 1; fi; \
-	echo "selfhost-e2e ok: C from the single self-hosted compiler (brickc) compiles and runs like the Go compiler's"
+	fail=0; \
+	for f in examples/*.brick; do \
+		case "$$f" in *extern*) continue;; esac; \
+		/tmp/brickc "$$f" -o /tmp/brick-self-bin 2>/dev/null || { echo "selfhost-e2e brickc build FAILED: $$f"; fail=1; continue; }; \
+		./bin/brick build "$$f" -o /tmp/brick-go-bin >/dev/null 2>&1 || continue; \
+		if ! diff <(/tmp/brick-self-bin 2>/dev/null) <(/tmp/brick-go-bin 2>/dev/null); then \
+			echo "selfhost-e2e MISMATCH (linked by brickc): $$f"; fail=1; \
+		fi; \
+	done; \
+	if [ $$fail -ne 0 ]; then echo "self-host end-to-end FAILED"; exit 1; fi; \
+	echo "selfhost-e2e ok: the single self-hosted compiler emits C, builds it with cc, and the program runs like the Go compiler's"
 
 # Bootstrap (§15): the self-hosted compiler compiles its own source. Stage 1 is
 # built by the Go compiler; stage 2 is built by stage 1; stage 3 by stage 2.
@@ -154,7 +164,12 @@ bootstrap: build
 		fi; \
 	done; \
 	if [ $$fail -ne 0 ]; then echo "bootstrap FAILED"; exit 1; fi; \
-	echo "bootstrap ok: Go-built compiler → self-built compiler → itself (identical C)"
+	/tmp/brickc2 selfhost/brickc.brick -o /tmp/brickc-self 2>/dev/null || { echo "bootstrap: stage 2 could not build itself with cc"; exit 1; }; \
+	/tmp/brickc-self examples/hello.brick -o /tmp/hello-self 2>/dev/null || { echo "bootstrap: the self-built compiler could not build hello"; exit 1; }; \
+	if ! diff <(/tmp/brickc-self examples/hello.brick -o -) <(./bin/brick emit examples/hello.brick); then \
+		echo "bootstrap: self-built compiler emits different C"; exit 1; \
+	fi; \
+	echo "bootstrap ok: Go-built compiler → self-built compiler → itself (identical C), and the self-built compiler builds and links working programs"
 
 # Write a single-file backup of the whole repo (all branches and tags) to
 # ../brick-backups. Restore with:  git clone <file>.bundle brick
