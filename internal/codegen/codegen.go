@@ -300,6 +300,19 @@ static inline const char *brick_int_to_text(int64_t value)
     return text;
 }
 
+static inline const char *brick_float_to_text(double value)
+{
+    char *text = brick_alloc(32);
+
+    snprintf(text, 32, "%g", value);
+    return text;
+}
+
+static inline const char *brick_bool_to_text(bool value)
+{
+    return value ? "true" : "false";
+}
+
 static inline char *brick_read_file(const char *path)
 {
     FILE  *file;
@@ -972,7 +985,16 @@ func (g *Generator) expr(e ast.Expr) string {
 			case "Builder":
 				return "brick_builder_new()"
 			case "to_text":
-				return fmt.Sprintf("brick_int_to_text(%s)", g.expr(ex.Args[0]))
+				arg := ex.Args[0]
+				a := g.expr(arg)
+				switch {
+				case g.types[arg].Equals(ast.Type{Name: "float"}):
+					return fmt.Sprintf("brick_float_to_text(%s)", a)
+				case g.types[arg].Equals(ast.Type{Name: "bool"}):
+					return fmt.Sprintf("brick_bool_to_text(%s)", a)
+				default:
+					return fmt.Sprintf("brick_int_to_text(%s)", a)
+				}
 			}
 		}
 		if fe, ok := ex.Callee.(*ast.FieldExpr); ok {

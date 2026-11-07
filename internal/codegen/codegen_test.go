@@ -323,3 +323,18 @@ func TestCharLiteralCodegen(t *testing.T) {
 		t.Errorf("'a' should lower to the int 97\n%s", out)
 	}
 }
+
+func TestToTextCodegenByType(t *testing.T) {
+	out := gen(t, `function main() { print(to_text(2)) print(to_text(1.5)) print(to_text(true)) }`)
+	for _, want := range []string{
+		"brick_int_to_text(2)",
+		"brick_float_to_text(1.5)",
+		"brick_bool_to_text(true)",
+		"brick_float_to_text(double value)",
+		"brick_bool_to_text(bool value)",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q\n%s", want, out)
+		}
+	}
+}

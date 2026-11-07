@@ -782,10 +782,11 @@ func (c *Checker) inferCall(ex *ast.CallExpr) ast.Type {
 	}
 	if id.Name == "to_text" {
 		if len(ex.Args) != 1 {
-			c.errorf(ex, "to_text takes exactly 1 argument (an int), got %d", len(ex.Args))
+			c.errorf(ex, "to_text takes exactly 1 argument (an int, float or bool), got %d", len(ex.Args))
 		}
-		if at := c.infer(ex.Args[0]); !at.Equals(intT) {
-			c.errorf(ex, "to_text expects an int, got %s", at)
+		at := c.infer(ex.Args[0])
+		if !at.Equals(intT) && !at.Equals(floatT) && !at.Equals(boolT) {
+			c.errorf(ex, "to_text expects an int, float or bool, got %s", at)
 		}
 		return textT
 	}

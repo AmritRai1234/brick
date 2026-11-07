@@ -686,7 +686,18 @@ func (in *interp) evalCall(ex *ast.CallExpr, env *Env) (Value, error) {
 			if err != nil {
 				return nil, err
 			}
-			return strconv.FormatInt(read(v).(int64), 10), nil
+			switch x := read(v).(type) {
+			case int64:
+				return strconv.FormatInt(x, 10), nil
+			case float64:
+				return formatFloat(x), nil
+			case bool:
+				if x {
+					return "true", nil
+				}
+				return "false", nil
+			}
+			return nil, &RuntimeError{Msg: "to_text: unsupported type"}
 		}
 	}
 

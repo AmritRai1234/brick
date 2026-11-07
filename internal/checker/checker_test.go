@@ -351,3 +351,10 @@ func TestForOverNonIterable(t *testing.T) {
 		t.Fatal("want an error for iterating something that is not a List or text")
 	}
 }
+
+func TestToTextAcceptsFloatAndBool(t *testing.T) {
+	src := `function main() { print(to_text(1.5)) print(to_text(true)) print(to_text(2)) }`
+	if _, err := check(t, src); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

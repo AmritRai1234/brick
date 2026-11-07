@@ -319,19 +319,20 @@ Brick-written compiler would need.
   value, so it compares and indexes naturally with `text`
 - reading and writing files (`read_file`, `write_file`), command-line `args()`
 - `import "path"` — pull another file's declarations into the program
-- `Builder()` (`add`, `build`) and `to_text(int)` — assemble output without
-  quadratic `+`
+- `Builder()` (`add`, `build`) and `to_text(...)` for `int`, `float` and `bool`
+  — assemble output without quadratic `+`
 - top-level `const` — computed at compile time and inlined
 - `arena { ... }` for bulk allocation
 - output via `print` / `eprint`
 
-**Still missing (in rough priority order)**
+With those in place, every box in the audit is ticked: Brick can express a
+lexer, a parser, symbol tables, type checking and a C emitter. The roadmap's
+last item (self-hosting, §15) is now a matter of writing the compiler in Brick
+itself.
 
-1. `to_text` for `float` and `bool` — today it takes only an `int`.
-
-Each will land the same way as the features above: implemented across the lexer
-/parser/checker/codegen/interpreter, with an example that `make diff` proves the
-interpreter and the compiled binary agree on.
+Each feature above landed the same way as the ones before it: implemented across
+the lexer/parser/checker/codegen/interpreter, with an example that `make diff`
+proves the interpreter and the compiled binary agree on.
 
 ## Version control
 
@@ -352,7 +353,8 @@ away:
 | `v0.3.4` | text `Builder` + `to_text(int)` |
 | `v0.3.5` | top-level `const` |
 | `v0.3.6` | `for x in xs { ... }` |
-| `v0.3.7` | character literals (`'a'`) (current) |
+| `v0.3.7` | character literals (`'a'`) |
+| `v0.3.8` | `to_text` for `float` and `bool` (current) |
 
 ```sh
 git tag                     # list the tags

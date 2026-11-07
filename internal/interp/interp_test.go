@@ -268,3 +268,14 @@ func TestCharLiteral(t *testing.T) {
 	}`
 	mustRun(t, src, "97\n10\n1")
 }
+
+func TestToTextFloatBool(t *testing.T) {
+	src := `
+	function main() {
+		print(to_text(3.5))    // 3.5
+		print(to_text(true))   // true
+		print(to_text(1 < 2))  // true
+		print(to_text(false))  // false
+	}`
+	mustRun(t, src, "3.5\ntrue\ntrue\nfalse")
+}

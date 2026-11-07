@@ -20,4 +20,9 @@ function main() {
     var line = ""
     line = line + "n = " + to_text(42)
     print(line)          // n = 42
+
+    // to_text also handles float and bool.
+    print(to_text(3.14159))   // 3.14159
+    print(to_text(1 < 2))     // true
+    print(to_text(false))     // false
 }
