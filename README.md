@@ -253,11 +253,12 @@ Mapped to the roadmap in the spec (§15):
       interpreter (`internal/interp`) runs the same programs as the compiled
       binary; `brick diff` and `make diff` compare their output and report any
       disagreement (§10). It covers the whole core language.
-- [~] **9. Self-hosting** — in progress. The lexer is now written in Brick
-      (`selfhost/lexer.brick`) and checked byte-for-byte against the Go lexer
-      via `brick tokdump` and `make selfhost` over every example. A length-
-      carrying byte-string type is the next prerequisite for a fully faithful
-      port (see `selfhost/README.md`).
+- [~] **9. Self-hosting** — in progress. The lexer (`selfhost/lexer.brick`)
+      and the parser + AST dumper (`selfhost/parser.brick`) are written in Brick
+      and checked against the Go compiler (`brick tokdump`, `brick ast`) by
+      `make selfhost` over every example. The checker and C emitter are next;
+      a length-carrying byte-string type is the main language prerequisite (see
+      `selfhost/README.md`).
 
 ### Semantics enforced by the checker
 
@@ -362,7 +363,8 @@ away:
 | `v0.3.7` | character literals (`'a'`) |
 | `v0.3.8` | `to_text` for `float` and `bool` |
 | `v0.3.9` | predictable C linking (`foo.c`, `foo.d/*.c`) |
-| `v0.3.10` | self-hosting begins: `slice`, `brick tokdump`, Brick-written lexer (current) |
+| `v0.3.10` | self-hosting begins: `slice`, `brick tokdump`, Brick-written lexer |
+| `v0.3.11` | self-hosted parser + AST dump; borrow keeps `List` element type (current) |
 
 ```sh
 git tag                     # list the tags

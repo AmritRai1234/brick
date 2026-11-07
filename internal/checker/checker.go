@@ -599,7 +599,9 @@ func (c *Checker) inferUnary(ex *ast.UnaryExpr) ast.Type {
 		}
 		return boolT
 	case "&", "&mut":
-		return ast.Type{Name: t.Name, Ptr: true}
+		ptr := t
+		ptr.Ptr = true
+		return ptr
 	}
 	c.errorf(ex, "unknown unary operator %q", ex.Op)
 	return voidT

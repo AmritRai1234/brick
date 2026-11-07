@@ -358,3 +358,20 @@ func TestToTextAcceptsFloatAndBool(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestBorrowListKeepsElementType(t *testing.T) {
+	// A borrow of a List must keep its element type, so a helper taking
+	// &mut List(text) can push text and reject, say, an int.
+	_, err := check(t, `
+function add(xs: &mut List(text)) { xs.push("ok") }
+function main() { var xs = List(text) add(&mut xs) }`)
+	if err != nil {
+		t.Fatalf("expected ok, got %v", err)
+	}
+	_, err = check(t, `
+function add(xs: &mut List(text)) { xs.push(1) }
+function main() { var xs = List(text) add(&mut xs) }`)
+	if err == nil {
+		t.Fatal("expected error pushing int into &mut List(text)")
+	}
+}

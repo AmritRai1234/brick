@@ -6,25 +6,37 @@ Each component is verified against the Go compiler so the two can never drift.
 
 ## How a component is checked
 
-The Go toolchain exposes a canonical, escape-free token dump:
+Each component is diffed against the matching Go compiler command over every
+example, so the two can never drift:
+
+| Component | Brick file | Go command | Brick command |
+| --- | --- | --- | --- |
+| Lexer | `lexer.brick` | `brick tokdump` | `brick run selfhost/lexer.brick` |
+| Parser | `parser.brick` | `brick ast` | `brick run selfhost/parser.brick` |
+
+`brick tokdump` prints a canonical, escape-free token dump — each line is
+`line col KIND nbytes b0 b1 ...`, the literal written as decimal byte values so
+no quoting or escaping rules have to agree between Go and Brick. `brick ast`
+prints the tree as indented text.
 
 ```sh
-brick tokdump examples/hello.brick
+make selfhost        # build both components, run both, diff every example
 ```
 
-Each line is `line col KIND nbytes b0 b1 ...` — the literal written as decimal
-byte values so no quoting or escaping rules have to agree between Go and Brick.
+Both currently match on **every** `examples/*.brick` file.
 
-A self-hosted component reads a `.brick` file, produces exactly that dump, and
-`make selfhost` diffs the two over every example:
+## Layout
 
-```sh
-make selfhost        # build the Brick lexer, run both, diff each example
-```
+- `tokens.brick` — the scanner, shared by both components.
+- `lexer.brick` — the token-dump front end (`import "tokens.brick"`).
+- `parser.brick` — the parser + AST dumper (`import "tokens.brick"`); it also
+  resolves imports exactly like `internal/loader`.
 
-When the dumps match for every example, the Brick lexer is a drop-in
-replacement for `internal/lexer`. It currently matches on **every**
-`examples/*.brick` file (`make selfhost`).
+The parser renders the dump text directly during recursive descent instead of
+building an AST: each parse function returns its node's dump text indented
+relative to itself, and the caller shifts the whole block right one level. New-
+and tab-bytes inside string literals are temporarily escaped so the re-indenter
+only sees structural line breaks (the Go dump prints them raw).
 
 ## Known gap: embedded NUL bytes
 
@@ -41,16 +53,16 @@ faithfully and is tracked as the next self-hosting step.
 
 ## Status
 
-| Component | Brick file | Verified against |
-| --- | --- | --- |
-| Lexer | `lexer.brick` | `brick tokdump` — matches on all examples |
-| Parser | — | `brick ast` (planned) |
-| Checker | — | planned |
-| C emitter | — | `brick emit` (planned) |
+| Component | Status |
+| --- | --- |
+| Lexer | done — matches `brick tokdump` on all examples |
+| Parser (+ AST dump) | done — matches `brick ast` on all examples |
+| Checker | planned |
+| C emitter | planned (`brick emit`) |
 
-## Building the lexer by hand
+## Building a component by hand
 
 ```sh
-brick build selfhost/lexer.brick -o /tmp/brick-lex
-/tmp/brick-lex examples/hello.brick
+brick build selfhost/parser.brick -o /tmp/brick-parse
+/tmp/brick-parse examples/hello.brick
 ```
