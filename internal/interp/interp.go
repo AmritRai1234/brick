@@ -12,7 +12,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strconv"
+	"syscall"
 
 	"brick/internal/ast"
 	"brick/internal/checker"
@@ -159,6 +161,34 @@ func Run(prog *ast.Program, ck *checker.Checker, opt Options) error {
 	}
 	_, err := in.callFunc(main, nil)
 	return err
+}
+
+// system runs argv without a shell and returns its exit status, or 127 when it
+// could not be started -- the same rule the generated C uses (brick_run). The
+// child's output goes to the interpreter's own streams, so differential
+// testing captures it.
+func (in *interp) system(argv []string) int {
+	if len(argv) == 0 {
+		return 127
+	}
+	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = in.out
+	cmd.Stderr = in.errw
+	err := cmd.Run()
+	if err == nil {
+		return 0
+	}
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		if code := ee.ExitCode(); code >= 0 {
+			return code
+		}
+		if ws, ok := ee.Sys().(syscall.WaitStatus); ok && ws.Signaled() {
+			return 128 + int(ws.Signal())
+		}
+	}
+	return 127
 }
 
 const stepLimit = 200_000_000
@@ -751,6 +781,24 @@ func (in *interp) evalCall(ex *ast.CallExpr, env *Env) (Value, error) {
 				items[i] = a
 			}
 			return &List{Elem: ast.Type{Name: "text"}, Items: items}, nil
+		case "system":
+			v, err := in.eval(ex.Args[0], env)
+			if err != nil {
+				return nil, err
+			}
+			l, ok := read(v).(*List)
+			if !ok {
+				return nil, &RuntimeError{Msg: "system(...) expects a List(text)", Line: ex.Line, Col: ex.Col}
+			}
+			argv := make([]string, 0, len(l.Items))
+			for _, it := range l.Items {
+				s, ok := read(it).(string)
+				if !ok {
+					return nil, &RuntimeError{Msg: "system(...) expects a List(text)", Line: ex.Line, Col: ex.Col}
+				}
+				argv = append(argv, s)
+			}
+			return int64(in.system(argv)), nil
 		case "List":
 			return &List{}, nil
 		case "Map":

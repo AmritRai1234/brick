@@ -1,0 +1,20 @@
+// system(argv) runs a program and returns its exit status. There is no shell,
+// so each argument is passed through exactly as written.
+function main() {
+    var ok = List(text)
+    ok.push("true")
+    print(system(ok))
+
+    var bad = List(text)
+    bad.push("false")
+    print(system(bad))
+
+    var echoes = List(text)
+    echoes.push("echo")
+    echoes.push("hello from a child process")
+    print(system(echoes))
+
+    var missing = List(text)
+    missing.push("brick-no-such-program")
+    print(system(missing))
+}

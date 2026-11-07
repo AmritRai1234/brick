@@ -41,9 +41,9 @@ the program behaves the same as one built by the Go compiler.
 
 `brickc.brick` is the whole pipeline as one program — lex, parse, resolve
 imports, check, emit — the same stages the separate components verify, wired
-into one command. Brick cannot spawn a process yet, so `brickc` stops at C: it
-writes the generated C to a file (default: the input name with a `.c`
-extension).
+into one command. It writes the generated C to a file (default: the input name
+with a `.c` extension); handing that C to a C compiler is the next step, now
+that `system(argv)` lets a Brick program start one (see below).
 
 ```sh
 brick run selfhost/brickc.brick examples/hello.brick           # writes examples/hello.c
@@ -152,6 +152,21 @@ brick errdump testdata/errors/check/assign_type.brick
 program is clean). `make selfhost` diffs it against the parser, checker, emitter
 and `brickc` over `testdata/errors/parse/` (parse errors) and
 `testdata/errors/check/` (type errors).
+
+## Running programs: `system(argv)`
+
+A compiler that cannot start another program cannot link what it emits, so
+Brick has `system(argv: List(text)) -> int`: it starts `argv[0]` with the
+remaining arguments, waits for it, and returns its exit status (`127` when the
+program cannot be started, `128 + signal` when it is killed). There is no shell,
+so an argument is passed through byte for byte.
+
+The interpreter and the generated C agree on all of it: the C backend emits a
+`fork` / `execvp` / `waitpid` helper (`fflush`ing Brick's own streams first, so
+output order matches), and the interpreter uses `os/exec` with the same rules.
+Both are gated: a program that never calls `system` emits exactly the C it did
+before. `examples/system.brick` exercises the success, failure and
+not-found cases, and `make diff` checks the interpreter and the binary agree.
 
 ## Bootstrapping
 

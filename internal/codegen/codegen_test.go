@@ -382,3 +382,21 @@ func TestExitCodegen(t *testing.T) {
 		t.Errorf("expected a direct exit() call, got:\n%s", out)
 	}
 }
+
+func TestSystemCodegen(t *testing.T) {
+	withSystem := gen(t, `function main() { print(system(args())) }`)
+	for _, want := range []string{
+		"static inline int64_t brick_run(BrickList argv)",
+		"execvp(vec[0], vec);",
+		"brick_run(brick_args())",
+	} {
+		if !strings.Contains(withSystem, want) {
+			t.Errorf("output missing %q\n%s", want, withSystem)
+		}
+	}
+	// A program that never calls system carries no fork/exec code.
+	plain := gen(t, `function main() { print(1) }`)
+	if strings.Contains(plain, "brick_run") {
+		t.Errorf("system runtime should be omitted:\n%s", plain)
+	}
+}

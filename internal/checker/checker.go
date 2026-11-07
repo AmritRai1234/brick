@@ -763,6 +763,18 @@ func (c *Checker) inferCall(ex *ast.CallExpr) ast.Type {
 		}
 		return voidT
 	}
+	// system(argv): run a program without a shell; returns its exit status.
+	if id.Name == "system" {
+		if len(ex.Args) != 1 {
+			c.errorf(ex, "system takes exactly 1 argument (a List(text) of program arguments), got %d", len(ex.Args))
+		}
+		elem := textT
+		want := ast.Type{Name: "List", Elem: &elem}
+		if at := c.infer(ex.Args[0]); !at.Equals(want) {
+			c.errorf(ex, "system expects a List(text) of program arguments, got %s", at)
+		}
+		return intT
+	}
 	if id.Name == "read_file" {
 		if len(ex.Args) != 1 {
 			c.errorf(ex, "read_file takes exactly 1 argument (a path), got %d", len(ex.Args))

@@ -425,3 +425,19 @@ func TestExitBuiltin(t *testing.T) {
 		}
 	}
 }
+
+func TestSystemBuiltin(t *testing.T) {
+	if _, err := check(t, `function main() { var st = system(args()) print(st) }`); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, src := range []string{
+		`function main() { system() }`,
+		`function main() { system("cc") }`,
+		`function main() { system(args(), 1) }`,
+		`function main() { var xs = List(int) var st = system(xs) }`,
+	} {
+		if _, err := check(t, src); err == nil {
+			t.Errorf("want an error for: %s", src)
+		}
+	}
+}

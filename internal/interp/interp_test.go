@@ -294,3 +294,24 @@ func TestExitBuiltin(t *testing.T) {
 		t.Fatalf("exit should stop main; output was %q", out)
 	}
 }
+
+func TestSystemBuiltin(t *testing.T) {
+	src := `function main() {
+    var ok = List(text)
+    ok.push("true")
+    print(system(ok))
+    var bad = List(text)
+    bad.push("false")
+    print(system(bad))
+    var missing = List(text)
+    missing.push("brick-no-such-program")
+    print(system(missing))
+}`
+	out, err := runInterp(t, src)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := strings.TrimRight(out, "\n"); got != "0\n1\n127" {
+		t.Fatalf("got %q, want statuses 0, 1, 127", got)
+	}
+}

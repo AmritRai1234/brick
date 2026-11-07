@@ -1451,6 +1451,17 @@ function inferCall(c: &mut Checker, idx: int) -> text {
         }
         return "void"
     }
+    if nm == "system" {
+        if n.args.len != 1 {
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": system takes exactly 1 argument (a List(text) of program arguments), got " + to_text(n.args.len))
+            return "int"
+        }
+        var st = infer(c, n.args[0])
+        if st != "List(text)" {
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": system expects a List(text) of program arguments, got " + st)
+        }
+        return "int"
+    }
     if nm == "read_file" {
         infer(c, n.args[0])
         return "text"

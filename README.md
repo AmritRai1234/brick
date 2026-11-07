@@ -298,7 +298,11 @@ Mapped to the roadmap in the spec (§15):
       the same way, and (via the new `exit(status)` builtin) exits non-zero
       without writing C. `brick errdump` prints that first diagnostic in a
       canonical form, and `make selfhost` diffs it against the self-hosted
-      parser, checker, emitter and `brickc` over `testdata/errors/`.
+      parser, checker, emitter and `brickc` over `testdata/errors/`. The last
+      gap was the driver: a compiler that cannot start another program cannot
+      link what it emits, so `system(argv)` now runs a program with exact
+      arguments and returns its exit status — the piece the self-hosted
+      compiler needs to hand its C to a C compiler.
 
 ### Semantics enforced by the checker
 
@@ -375,6 +379,9 @@ Brick-written compiler would need.
 - `slice(text, start, end) -> text` — extract a byte range of a string
 - output via `print` / `eprint`, and `exit(status)` to stop a program with a
   status code (the interpreter and the compiled binary both honour it)
+- `system(argv)` — run another program with `List(text)` arguments, no shell in
+  between, and get its exit status (`127` when it cannot be started); this is
+  what lets a Brick program drive a C compiler
 
 With those in place, every box in the audit is ticked: Brick can express a
 lexer, a parser, symbol tables, type checking and a C emitter. The roadmap's
@@ -423,7 +430,8 @@ away:
 | `v0.3.17` | byte-exact self-hosted lexer: token literals as `bytes` |
 | `v0.3.18` | `print_bytes`; byte-exact AST dump and emitter on `\0` literals |
 | `v0.3.19` | bootstrap: the self-hosted compiler compiles itself (identical C, stage 2 = stage 3) |
-| `v0.3.20` | `exit(status)`; `brick errdump`; self-hosted diagnostics match the Go compiler (current) |
+| `v0.3.20` | `exit(status)`; `brick errdump`; self-hosted diagnostics match the Go compiler |
+| `v0.3.21` | `system(argv)`: run a program without a shell and read its exit status (current) |
 
 ```sh
 git tag                     # list the tags
