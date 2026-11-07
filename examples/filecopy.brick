@@ -1,0 +1,17 @@
+// File I/O and args: copy a file, reported on stderr, summarized on stdout.
+function main() {
+    var argv = args()
+    if argv.len < 3 {
+        eprint("usage: filecopy <source> <destination>")
+        return
+    }
+
+    var source = argv[1]
+    var destination = argv[2]
+
+    var contents = read_file(source)
+    write_file(destination, contents)
+
+    print(contents.len)
+    eprint("copied")
+}

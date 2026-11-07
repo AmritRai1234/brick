@@ -502,6 +502,43 @@ func (c *Checker) inferCall(ex *ast.CallExpr) ast.Type {
 		}
 		return voidT
 	}
+	if id.Name == "eprint" {
+		if len(ex.Args) != 1 {
+			c.errorf(ex, "eprint takes exactly 1 argument, got %d", len(ex.Args))
+		}
+		if at := c.infer(ex.Args[0]); at.Ptr {
+			c.errorf(ex, "eprint cannot print a reference")
+		}
+		return voidT
+	}
+	if id.Name == "read_file" {
+		if len(ex.Args) != 1 {
+			c.errorf(ex, "read_file takes exactly 1 argument (a path), got %d", len(ex.Args))
+		}
+		if at := c.infer(ex.Args[0]); !at.Equals(textT) {
+			c.errorf(ex, "read_file path must be text, got %s", at)
+		}
+		return textT
+	}
+	if id.Name == "write_file" {
+		if len(ex.Args) != 2 {
+			c.errorf(ex, "write_file takes 2 arguments (path, contents), got %d", len(ex.Args))
+		}
+		if at := c.infer(ex.Args[0]); !at.Equals(textT) {
+			c.errorf(ex, "write_file path must be text, got %s", at)
+		}
+		if at := c.infer(ex.Args[1]); !at.Equals(textT) {
+			c.errorf(ex, "write_file contents must be text, got %s", at)
+		}
+		return voidT
+	}
+	if id.Name == "args" {
+		if len(ex.Args) != 0 {
+			c.errorf(ex, "args takes no arguments, got %d", len(ex.Args))
+		}
+		elem := textT
+		return ast.Type{Name: "List", Elem: &elem}
+	}
 	// List(T): an empty growable list of element type T
 	if id.Name == "List" {
 		if len(ex.Args) != 1 {

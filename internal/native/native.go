@@ -444,6 +444,10 @@ func (g *Gen) genCall(ex *ast.CallExpr) {
 		g.genPrint(ex.Args[0])
 		return
 	}
+	switch id.Name {
+	case "eprint", "read_file", "write_file", "args", "List":
+		g.errorf("%s is not supported by the native backend yet", id.Name)
+	}
 	if len(ex.Args) > len(argRegs) {
 		g.errorf("%s has more than %d arguments", id.Name, len(argRegs))
 	}

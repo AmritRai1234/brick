@@ -194,3 +194,29 @@ func TestCannotAssignToTextIndex(t *testing.T) {
 		t.Fatal("want an error assigning to a text index")
 	}
 }
+
+func TestFileAndArgsBuiltins(t *testing.T) {
+	src := `
+	function main() {
+		var argv = args()
+		if argv.len < 2 { eprint("usage") return }
+		var data = read_file(argv[1])
+		write_file("out.txt", data)
+		print(data.len)
+	}`
+	if _, err := check(t, src); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestWriteFileArity(t *testing.T) {
+	if _, err := check(t, `function main() { write_file("x") }`); err == nil {
+		t.Fatal("want an error for write_file with one argument")
+	}
+}
+
+func TestReadFileArgType(t *testing.T) {
+	if _, err := check(t, `function main() { var s = read_file(3) }`); err == nil {
+		t.Fatal("want an error for a non-text path")
+	}
+}

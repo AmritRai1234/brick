@@ -145,3 +145,35 @@ func TestTextCodegen(t *testing.T) {
 		}
 	}
 }
+
+func TestFileAndArgsCodegen(t *testing.T) {
+	out := gen(t, `
+	function main() {
+		var argv = args()
+		var data = read_file(argv[1])
+		write_file("out.txt", data)
+		eprint(data.len)
+	}`)
+	for _, want := range []string{
+		"int main(int brick_argc, char **brick_argv)",
+		"brick_saved_argc = brick_argc;",
+		"brick_args()",
+		"brick_read_file((*(const char**)brick_list_at(&(argv), 1)))",
+		"brick_write_file(\"out.txt\", data)",
+		"fprintf(stderr, ",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q\n%s", want, out)
+		}
+	}
+}
+
+func TestNoArgsPlumbingWhenUnused(t *testing.T) {
+	out := gen(t, `function main() { print(1) }`)
+	if strings.Contains(out, "brick_saved_argc") {
+		t.Errorf("args plumbing should not appear when args() is unused\n%s", out)
+	}
+	if !strings.Contains(out, "int main(void)") {
+		t.Errorf("main should be int main(void) when args() is unused\n%s", out)
+	}
+}
