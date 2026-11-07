@@ -433,3 +433,60 @@ func TestReadDirCodegen(t *testing.T) {
 		t.Errorf("directory runtime should be omitted:\n%s", plain)
 	}
 }
+
+func TestBuilderAddIntFastPath(t *testing.T) {
+	out := gen(t, `
+	function main() {
+		var b = Builder()
+		var i = 0
+		while i < 3 {
+			b.add(to_text(i))
+			b.add(",")
+			i = i + 1
+		}
+		print(b.build())
+	}`)
+	if !strings.Contains(out, "brick_builder_add_int(&(b), i)") {
+		t.Errorf("builder.add(to_text(int)) should append the integer directly\n%s", out)
+	}
+	if strings.Contains(out, "brick_builder_add(&(b), brick_int_to_text(") {
+		t.Errorf("builder.add(to_text(int)) should not build intermediate text\n%s", out)
+	}
+	// Only ints take the fast path: everything else still goes through add().
+	for _, src := range []string{
+		`function main() { var b = Builder() b.add(to_text(1.5)) print(b.build()) }`,
+		`function main() { var b = Builder() b.add(to_text(true)) print(b.build()) }`,
+		`function main() { var b = Builder() b.add("x") print(b.build()) }`,
+	} {
+		other := gen(t, src)
+		if strings.Contains(other, "brick_builder_add_int") && !strings.Contains(other, "brick_builder_add(&(") {
+			t.Errorf("non-int add should not use the int fast path\n%s", other)
+		}
+	}
+}
+
+func TestIntToTextDoesNotFormat(t *testing.T) {
+	out := gen(t, `function main() { print(to_text(42)) }`)
+	helper := out[strings.Index(out, "brick_int_to_text(int64_t value)"):]
+	helper = helper[:strings.Index(helper, "\n}")]
+	if strings.Contains(helper, "snprintf") {
+		t.Errorf("brick_int_to_text should convert by hand, not via snprintf:\n%s", helper)
+	}
+	for _, want := range []string{"char     digits[24]", "magnitude % 10u", "brick_alloc(len + 1)"} {
+		if !strings.Contains(helper, want) {
+			t.Errorf("brick_int_to_text missing %q:\n%s", want, helper)
+		}
+	}
+}
+
+func TestBuilderAddIsSingleStrlen(t *testing.T) {
+	out := gen(t, `function main() { var b = Builder() b.add("x") print(b.build()) }`)
+	helper := out[strings.Index(out, "static inline void brick_builder_add("):]
+	helper = helper[:strings.Index(helper, "\n}")]
+	if got := strings.Count(helper, "strlen(text)"); got != 1 {
+		t.Errorf("brick_builder_add should call strlen once, got %d:\n%s", got, helper)
+	}
+	if !strings.Contains(out, "static inline void brick_builder_reserve(BrickBuilder *builder, size_t need)") {
+		t.Errorf("builder growth should be shared through brick_builder_reserve\n%s", out)
+	}
+}

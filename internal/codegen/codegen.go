@@ -563,9 +563,25 @@ static inline const char *brick_text_concat(const char *left, const char *right)
 
 static inline const char *brick_int_to_text(int64_t value)
 {
-    char *text = brick_alloc(32);
+    char     digits[24];   /* reversed digits, enough for any int64_t */
+    size_t   len = 0;
+    uint64_t magnitude;
+    char    *text;
+    size_t   i;
 
-    snprintf(text, 32, "%lld", (long long)value);
+    magnitude = value < 0 ? (uint64_t)(-(value + 1)) + 1u : (uint64_t)value;
+    do {
+        digits[len++] = (char)('0' + (int)(magnitude % 10u));
+        magnitude /= 10u;
+    } while (magnitude != 0);
+    if (value < 0) {
+        digits[len++] = '-';
+    }
+    text = brick_alloc(len + 1);
+    for (i = 0; i < len; i++) {
+        text[i] = digits[len - 1 - i];
+    }
+    text[len] = '\0';
     return text;
 }
 
@@ -658,21 +674,56 @@ static inline BrickBuilder brick_builder_new(void)
     return builder;
 }
 
+static inline void brick_builder_reserve(BrickBuilder *builder, size_t need)
+{
+    size_t cap;
+
+    if (need <= builder->cap) {
+        return;
+    }
+    cap = builder->cap ? builder->cap * BRICK_BUILDER_GROWTH_FACTOR
+                       : BRICK_BUILDER_INITIAL_CAPACITY;
+    while (cap < need) {
+        cap *= BRICK_BUILDER_GROWTH_FACTOR;
+    }
+    builder->data = brick_resize(builder->data, builder->cap, cap);
+    builder->cap  = cap;
+}
+
 static inline void brick_builder_add(BrickBuilder *builder, const char *text)
 {
-    size_t need = builder->len + strlen(text) + 1;   /* room for the NUL */
+    size_t len = strlen(text);
 
-    if (need > builder->cap) {
-        size_t cap = builder->cap ? builder->cap * BRICK_BUILDER_GROWTH_FACTOR
-                                  : BRICK_BUILDER_INITIAL_CAPACITY;
-        while (cap < need) {
-            cap *= BRICK_BUILDER_GROWTH_FACTOR;
-        }
-        builder->data = brick_resize(builder->data, builder->cap, cap);
-        builder->cap  = cap;
+    brick_builder_reserve(builder, builder->len + len + 1);
+    memcpy(builder->data + builder->len, text, len);
+    builder->len += len;
+    builder->data[builder->len] = '\0';
+}
+
+/*
+ * Append an integer straight into the buffer, with no intermediate text and no
+ * strlen: this is what an int passed to builder.add() compiles to.
+ */
+static inline void brick_builder_add_int(BrickBuilder *builder, int64_t value)
+{
+    char     digits[24];   /* reversed digits, enough for any int64_t */
+    size_t   len = 0;
+    uint64_t magnitude;
+    size_t   i;
+
+    magnitude = value < 0 ? (uint64_t)(-(value + 1)) + 1u : (uint64_t)value;
+    do {
+        digits[len++] = (char)('0' + (int)(magnitude % 10u));
+        magnitude /= 10u;
+    } while (magnitude != 0);
+    if (value < 0) {
+        digits[len++] = '-';
     }
-    memcpy(builder->data + builder->len, text, strlen(text));
-    builder->len += strlen(text);
+    brick_builder_reserve(builder, builder->len + len + 1);
+    for (i = 0; i < len; i++) {
+        builder->data[builder->len + i] = digits[len - 1 - i];
+    }
+    builder->len += len;
     builder->data[builder->len] = '\0';
 }
 
@@ -1313,6 +1364,12 @@ func (g *Generator) expr(e ast.Expr) string {
 			if bt.Name == "Builder" {
 				switch fe.Field {
 				case "add":
+					if ce, ok := ex.Args[0].(*ast.CallExpr); ok {
+						if id, ok := ce.Callee.(*ast.Ident); ok && id.Name == "to_text" && len(ce.Args) == 1 &&
+							g.types[ce.Args[0]].Name == "int" {
+							return fmt.Sprintf("brick_builder_add_int(&(%s), %s)", g.expr(fe.Base), g.expr(ce.Args[0]))
+						}
+					}
 					return fmt.Sprintf("brick_builder_add(&(%s), %s)", g.expr(fe.Base), g.expr(ex.Args[0]))
 				case "build":
 					return fmt.Sprintf("brick_builder_build(&(%s))", g.expr(fe.Base))

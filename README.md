@@ -450,7 +450,8 @@ away:
 | `v0.3.20` | `exit(status)`; `brick errdump`; self-hosted diagnostics match the Go compiler |
 | `v0.3.21` | `system(argv)`: run a program without a shell and read its exit status |
 | `v0.3.22` | `getenv`; the self-hosted compiler builds and links programs by itself |
-| `v0.3.23` | `read_dir` / `is_dir`; `brickc` links `extern` companion C files (current) |
+| `v0.3.23` | `read_dir` / `is_dir`; `brickc` links `extern` companion C files |
+| `v0.3.24` | `builder.add(to_text(n))` appends digits straight into the buffer; `to_text` for ints no longer uses `snprintf` (current) |
 
 ```sh
 git tag                     # list the tags
@@ -483,6 +484,10 @@ git clone brick-<date>.bundle brick      # restore it as a fresh repo
   hand-written parser gives better errors and is easier to debug.
 - **C as the backend.** All the interesting optimization happens in gcc/clang;
   the Brick compiler stays small enough to reason about and, later, to verify.
+  The one place the *runtime* beats a generic library is appending integers to a
+  `Builder`: `builder.add(to_text(n))` compiles to `brick_builder_add_int`, which
+  writes the digits into the buffer directly, so building text allocates nothing
+  per number (see `bench/`).
 
 ## Roadmap next steps
 

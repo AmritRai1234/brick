@@ -1,0 +1,29 @@
+// to_text over the whole int range, on its own and appended through a Builder.
+// The two paths differ in the runtime: a bare to_text allocates a small text,
+// while builder.add(to_text(n)) writes the digits straight into the buffer.
+function main() {
+    var values = List(int)
+    values.push(0)
+    values.push(1)
+    values.push(-1)
+    values.push(9)
+    values.push(10)
+    values.push(-10)
+    values.push(1234567890)
+    values.push(-1234567890)
+    values.push(9223372036854775807)
+    values.push(-9223372036854775807 - 1)
+
+    var b = Builder()
+    var i = 0
+    while i < values.len {
+        var n = values[i]
+        print(to_text(n))
+        b.add(to_text(n))
+        b.add(" ")
+        i = i + 1
+    }
+
+    print(b.build())   // the same numbers, separated by spaces
+    print(b.len)       // 80: the ten numbers above, separated by 9 spaces
+}

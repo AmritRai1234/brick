@@ -682,7 +682,17 @@ function emitCall(em: &mut Emitter, n: Node) -> text {
         var bt2 = em.c.nodes[callee.e1].ty
         if bt2 == "Builder" {
             if callee.name == "add" {
-                return "brick_builder_add(&(" + expr(em, callee.e1) + "), " + expr(em, n.args[0]) + ")"
+                var av = n.args[0]
+                var ac = em.c.nodes[av]
+                if ac.kind == "Call" {
+                    var acallee = em.c.nodes[ac.e1]
+                    if acallee.kind == "Ident" && acallee.name == "to_text" && ac.args.len == 1 {
+                        if em.c.nodes[ac.args[0]].ty == "int" {
+                            return "brick_builder_add_int(&(" + expr(em, callee.e1) + "), " + expr(em, ac.args[0]) + ")"
+                        }
+                    }
+                }
+                return "brick_builder_add(&(" + expr(em, callee.e1) + "), " + expr(em, av) + ")"
             }
             if callee.name == "build" {
                 return "brick_builder_build(&(" + expr(em, callee.e1) + "))"
