@@ -249,6 +249,38 @@ make examples    # build every example and run it
 The lexer, parser, checker and code generator each have unit tests, and every
 example in `examples/` is a working end-to-end case.
 
+## Version control
+
+The repo is tagged at every milestone, so an older version is always one command
+away:
+
+| Tag | Milestone |
+| --- | --- |
+| `v0.1.0` | first compiler (lexer, parser, checker, C + native backends, enums, lists, text) |
+| `v0.2.0` | I/O and process builtins (`eprint`, `read_file`, `write_file`, `args`) |
+| `v0.2.1` | interpreter + differential testing, `extern` linked end to end |
+| `v0.2.2` | the official formatter |
+| `v0.2.3` | arenas |
+| `v0.3.0` | language server (current) |
+
+```sh
+git tag                     # list the tags
+git checkout v0.2.3         # look at an older version (detached HEAD)
+git checkout master         # come back to the latest
+
+git restore .               # throw away uncommitted edits
+git clean -fd               # also remove new untracked files
+git checkout .              # (older spelling of `git restore .`)
+```
+
+A full single-file backup of the whole repo — every branch and tag — can be
+written to `../brick-backups` and restored anywhere:
+
+```sh
+make backup                              # writes ../brick-backups/brick-<date>.bundle
+git clone brick-<date>.bundle brick      # restore it as a fresh repo
+```
+
 ## Design notes
 
 - **One obvious output shape per construct.** Each core construct lowers to a

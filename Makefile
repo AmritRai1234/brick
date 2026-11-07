@@ -1,4 +1,4 @@
-.PHONY: build test fmt fmt-check vet clean examples native diff interp
+.PHONY: build test fmt fmt-check vet clean examples native diff interp backup
 
 build:
 	go build -o bin/brick ./cmd/brick
@@ -49,6 +49,15 @@ native: build
 		./bin/brick run --target native "$$f"; \
 		echo; \
 	done
+
+# Write a single-file backup of the whole repo (all branches and tags) to
+# ../brick-backups. Restore with:  git clone <file>.bundle brick
+backup:
+	@mkdir -p ../brick-backups
+	@out="../brick-backups/brick-$$(date +%Y%m%d-%H%M).bundle"; \
+	git bundle create "$$out" --all >/dev/null && \
+	echo "wrote $$out" && \
+	git bundle verify "$$out" >/dev/null && echo "verified"
 
 clean:
 	rm -rf bin
