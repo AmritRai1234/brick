@@ -105,17 +105,26 @@ while the Go lexer keeps all three bytes. Brick programs cannot use such a
 literal at runtime as `text` (the same truncation happens in generated code),
 so this only shows up in the token dump.
 
-The language now has a length-carrying byte-string type, `bytes`, which can
-hold NUL and any byte 0..255; the self-hosted front end and code generator
-understand it, and `examples/bytes.brick` exercises it end to end. Switching
-the self-hosted lexer's token literal and source buffer from `text` to `bytes`
-is what remains to make the port byte-exact on sources containing NUL.
+The language has a length-carrying byte-string type, `bytes`, which can hold
+NUL and any byte 0..255; the self-hosted front end and code generator
+understand it, and `examples/bytes.brick` exercises it end to end.
+
+The self-hosted lexer now carries each token's literal as `bytes` (`Token.raw`),
+building it byte-by-byte in `readString` and `readCharLiteral`, while `lit`
+stays `text` for the parser's convenience. So `brick tokdump` matches the Go
+lexer even for `"\0"`: `make selfhost` diffs the lexer over `selfhost/*.brick`
+too, and those sources contain such literals.
+
+The AST and type dumps are still assembled and printed as `text`. A source
+whose string literal value contains a NUL would truncate there, so those checks
+stay limited to the examples. Moving the dumps to `bytes` and printing them
+byte-wise is the remaining piece for a fully byte-exact front end.
 
 ## Status
 
 | Component | Status |
 | --- | --- |
-| Lexer | done — matches `brick tokdump` on all examples (text sources; NUL gap above) |
+| Lexer | done — matches `brick tokdump` on all examples and on `selfhost/*.brick`, including `\0` literals |
 | Parser (+ AST dump) | done — matches `brick ast` on all examples |
 | Checker (+ type dump) | done — matches `brick typedump` on all examples |
 | C emitter | done — matches `brick emit` on all examples, including `bytes` |

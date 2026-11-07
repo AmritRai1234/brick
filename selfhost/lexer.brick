@@ -20,11 +20,12 @@ function emit(t: Token) {
     out.add(" ")
     out.add(t.kind)
     out.add(" ")
-    out.add(to_text(t.lit.len))
+    // raw, not lit: the literal is printed as exact bytes, so \0 survives.
+    out.add(to_text(t.raw.len))
     var i = 0
-    while i < t.lit.len {
+    while i < t.raw.len {
         out.add(" ")
-        out.add(to_text(t.lit[i]))
+        out.add(to_text(t.raw[i]))
         i = i + 1
     }
     print(out.build())

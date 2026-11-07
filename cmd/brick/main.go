@@ -38,7 +38,7 @@ import (
 	"brick/internal/parser"
 )
 
-const version = "0.3.16"
+const version = "0.3.17"
 
 func main() {
 	if len(os.Args) < 2 {

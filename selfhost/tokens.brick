@@ -16,6 +16,10 @@ struct Lexer {
 struct Token {
     kind: text,
     lit: text,
+    // raw is lit as exact bytes. lit is text, which cannot carry a NUL, so
+    // the token dump reads raw instead: a string or character literal written
+    // with \0 keeps its zero byte here.
+    raw: bytes,
     line: int,
     col: int,
 }
@@ -84,7 +88,18 @@ function skipIgnored(l: &mut Lexer) {
 }
 
 function tok(kind: text, lit: text, line: int, col: int) -> Token {
-    return Token{ kind: kind, lit: lit, line: line, col: col }
+    return Token{ kind: kind, lit: lit, raw: to_bytes(lit), line: line, col: col }
+}
+
+function tokRaw(kind: text, lit: text, raw: bytes, line: int, col: int) -> Token {
+    return Token{ kind: kind, lit: lit, raw: raw, line: line, col: col }
+}
+
+// byteString builds a one-byte bytes value from a byte value.
+function byteString(c: int) -> bytes {
+    var one = List(int)
+    one.push(c)
+    return bytes(one)
 }
 
 // ---------- keywords ----------
@@ -190,27 +205,38 @@ function readNumber(l: &mut Lexer, line: int, col: int) -> Token {
 function readString(l: &mut Lexer, line: int, col: int) -> Token {
     readChar(l) // consume the opening quote
     var buf = ""
+    var codes = List(int)
     while l.ch != '"' && l.ch != 0 {
         if l.ch == '\\' {
             readChar(l)
             if l.ch == 'n' {
                 buf = buf + "\n"
+                codes.push(10)
             } else if l.ch == 't' {
                 buf = buf + "\t"
+                codes.push(9)
             } else if l.ch == 'r' {
                 buf = buf + "\r"
+                codes.push(13)
             } else if l.ch == '\\' {
                 buf = buf + "\\"
+                codes.push(92)
             } else if l.ch == '"' {
                 buf = buf + "\""
+                codes.push(34)
             } else if l.ch == '0' {
+                // A zero byte: text would drop it, so keep it in codes.
                 buf = buf + "\0"
+                codes.push(0)
             } else {
                 buf = buf + "\\" + slice(l.src, l.pos, l.pos + 1)
+                codes.push(92)
+                codes.push(l.ch)
             }
             readChar(l)
         } else {
             buf = buf + slice(l.src, l.pos, l.pos + 1)
+            codes.push(l.ch)
             readChar(l)
         }
     }
@@ -218,7 +244,7 @@ function readString(l: &mut Lexer, line: int, col: int) -> Token {
         return tok("ILLEGAL", "unterminated string", line, col)
     }
     readChar(l) // consume the closing quote
-    return tok("STRING", buf, line, col)
+    return tokRaw("STRING", buf, bytes(codes), line, col)
 }
 
 function readCharLiteral(l: &mut Lexer, line: int, col: int) -> Token {
@@ -227,35 +253,45 @@ function readCharLiteral(l: &mut Lexer, line: int, col: int) -> Token {
         return tok("ILLEGAL", "unterminated character literal", line, col)
     }
     var b = ""
+    var code = 0
     if l.ch == '\\' {
         readChar(l)
         if l.ch == 'n' {
             b = "\n"
+            code = 10
         } else if l.ch == 't' {
             b = "\t"
+            code = 9
         } else if l.ch == 'r' {
             b = "\r"
+            code = 13
         } else if l.ch == '\\' {
             b = "\\"
+            code = 92
         } else if l.ch == '\'' {
             b = "'"
+            code = 39
         } else if l.ch == '"' {
             b = "\""
+            code = 34
         } else if l.ch == '0' {
+            // A zero byte: text would drop it, so keep code = 0.
             b = "\0"
+            code = 0
         } else {
             return tok("ILLEGAL", "unknown escape in character literal", line, col)
         }
         readChar(l)
     } else {
         b = slice(l.src, l.pos, l.pos + 1)
+        code = l.ch
         readChar(l)
     }
     if l.ch != '\'' {
         return tok("ILLEGAL", "character literal must hold exactly one byte", line, col)
     }
     readChar(l) // consume the closing quote
-    return tok("CHAR", b, line, col)
+    return tokRaw("CHAR", b, byteString(code), line, col)
 }
 
 // ---------- the scanner ----------

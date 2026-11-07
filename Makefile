@@ -79,8 +79,13 @@ selfhost: build
 			echo "selfhost brickc MISMATCH: $$f"; fail=1; \
 		fi; \
 	done; \
+	for f in selfhost/*.brick; do \
+		if ! diff <(/tmp/brick-lex "$$f") <(./bin/brick tokdump "$$f"); then \
+			echo "selfhost lexer MISMATCH (NUL-carrying literal): $$f"; fail=1; \
+		fi; \
+	done; \
 	if [ $$fail -ne 0 ]; then echo "self-hosting check FAILED"; exit 1; fi; \
-	echo "selfhost ok: lexer→tokdump, parser→ast, checker→typedump, emitter→emit, brickc→emit, every example"
+	echo "selfhost ok: lexer→tokdump, parser→ast, checker→typedump, emitter→emit, brickc→emit, every example (and tokdump on selfhost/*.brick)"
 
 # End-to-end self-hosting: use the single Brick-written compiler (brickc) as the
 # compiler -- source .brick in, C out to a file -- then compile that C with the

@@ -283,9 +283,10 @@ Mapped to the roadmap in the spec (§15):
       whole pipeline as one program — lex, parse, resolve imports, check, emit —
       a single self-hosted compiler; `make selfhost-e2e` uses it to compile each
       example, builds the C with the system C compiler, and checks the result
-      runs like the Go compiler's. The length-carrying `bytes` type — the
-      prerequisite for a byte-exact lexer over sources containing NUL — now
-      exists and is used by the self-hosted pipeline (see `selfhost/README.md`).
+      runs like the Go compiler's. The length-carrying `bytes` type makes the
+      lexer byte-exact: token literals are kept as bytes, so `brick tokdump` now
+      matches even on `selfhost/*.brick`, whose sources contain `\0` literals
+      (see `selfhost/README.md`).
 
 ### Semantics enforced by the checker
 
@@ -403,7 +404,8 @@ away:
 | `v0.3.13` | self-hosted checker + type dump |
 | `v0.3.14` | self-hosted C emitter; shared `frontend.brick` |
 | `v0.3.15` | single self-hosted compiler (`brickc.brick`); shared `codegen.brick` |
-| `v0.3.16` | `bytes`: length-carrying byte strings (current) |
+| `v0.3.16` | `bytes`: length-carrying byte strings |
+| `v0.3.17` | byte-exact self-hosted lexer: token literals as `bytes` (current) |
 
 ```sh
 git tag                     # list the tags
