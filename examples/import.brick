@@ -1,0 +1,12 @@
+// import pulls another file's top-level declarations into this program.
+// `greet`, `twice` and `Greeting` are all defined in lib/greet.brick.
+import "lib/greet"
+
+function main() {
+    print(greet("brick"))     // hello, brick
+    print(twice(21))          // 42
+
+    var g = Greeting{ who: "world", count: 3 }
+    print(g.who)              // world
+    print(g.count)            // 3
+}

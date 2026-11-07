@@ -159,6 +159,19 @@ function main() {
 }
 ```
 
+A program can span several files. `import` pulls another file's top-level
+declarations into the program (there is no separate compilation — the compiler
+sees one unit):
+
+```brick
+// main.brick
+import "lib/greet"
+
+function main() {
+    print(greet("brick"))   // defined in lib/greet.brick
+}
+```
+
 Generates readable C you can read side-by-side with the source (K&R style,
 Clean Code naming, `static` linkage, no hidden state):
 
@@ -248,6 +261,7 @@ internal/ast/       AST nodes and debug printer
 internal/checker/   symbol tables, type checks, expression types
 internal/codegen/   AST -> C
 internal/native/     AST -> x86-64 assembly (Brick's own backend)
+internal/loader/     source + imports -> one merged AST
 internal/interp/     AST -> values (tree-walking interpreter, for diff testing)
 internal/format/     source -> canonically indented source (the formatter)
 internal/lsp/        language server (JSON-RPC over stdio)
@@ -280,19 +294,18 @@ Brick-written compiler would need.
 - borrowing (`&`, `&mut`) — e.g. `&mut xs[0]` passed into a function
 - structs holding lists, and `xs[i].field = v`
 - reading and writing files (`read_file`, `write_file`), command-line `args()`
+- `import "path"` — pull another file's declarations into the program
 - `arena { ... }` for bulk allocation
 - output via `print` / `eprint`
 
 **Still missing (in rough priority order)**
 
-1. `import` — split the compiler across files; the keyword parses but is not
-   resolved yet.
-2. a text builder — `text` is immutable C strings, so building output by `+` is
+1. a text builder — `text` is immutable C strings, so building output by `+` is
    quadratic; a growable buffer is wanted.
-3. top-level `const` (and maybe `var`) — for keyword tables and similar.
-4. `for x in xs { ... }` — pure sugar the spec already describes as a rewrite
+2. top-level `const` (and maybe `var`) — for keyword tables and similar.
+3. `for x in xs { ... }` — pure sugar the spec already describes as a rewrite
    into `while` (§5).
-5. character literals (`'a'`) — today `s[i]` yields an `int` byte, which works
+4. character literals (`'a'`) — today `s[i]` yields an `int` byte, which works
    but reads poorly.
 
 Each will land the same way as the features above: implemented across the lexer

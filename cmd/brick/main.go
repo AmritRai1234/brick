@@ -32,6 +32,7 @@ import (
 	"brick/internal/format"
 	"brick/internal/interp"
 	"brick/internal/lexer"
+	"brick/internal/loader"
 	"brick/internal/lsp"
 	"brick/internal/native"
 	"brick/internal/parser"
@@ -60,14 +61,14 @@ func main() {
 		}
 	case "ast":
 		_, _, file, _ := parseArgs(rest)
-		fmt.Print(ast.Dump(mustParse(readFile(file))))
+		fmt.Print(ast.Dump(mustLoad(file)))
 	case "check":
 		_, _, file, _ := parseArgs(rest)
-		mustCheck(mustParse(readFile(file)))
+		mustCheck(mustLoad(file))
 		fmt.Printf("%s: ok\n", file)
 	case "asm":
 		_, _, file, _ := parseArgs(rest)
-		prog := mustParse(readFile(file))
+		prog := mustLoad(file)
 		ck := mustCheck(prog)
 		s, err := native.Generate(prog, ck)
 		if err != nil {
@@ -92,7 +93,7 @@ func main() {
 		os.Exit(fmtCmd(rest))
 	case "interp":
 		_, _, file, progArgs := parseArgs(rest)
-		prog := mustParse(readFile(file))
+		prog := mustLoad(file)
 		ck := mustCheck(prog)
 		if err := interp.Run(prog, ck, interp.Options{
 			Args:   progArgs,
@@ -183,7 +184,7 @@ func fmtCmd(args []string) int {
 // interpreter and as a compiled binary, and compare their output. A mismatch
 // means one of the two has a bug. Returns a process exit code.
 func diffRun(file, target string, progArgs []string) int {
-	prog := mustParse(readFile(file))
+	prog := mustLoad(file)
 	if programHasExtern(prog) {
 		fmt.Printf("skip: %s calls extern C functions (interpreter cannot run C)\n", file)
 		return 0
@@ -317,7 +318,7 @@ func die(msg string) {
 // ---------- pipeline ----------
 
 func lower(file, target string, warn bool) (kind, src string) {
-	prog := mustParse(readFile(file))
+	prog := mustLoad(file)
 	ck := mustCheck(prog)
 	switch target {
 	case "c":
@@ -357,6 +358,16 @@ func readFile(path string) string {
 		os.Exit(1)
 	}
 	return string(data)
+}
+
+// mustLoad parses a file, resolves its imports and returns the merged program.
+func mustLoad(file string) *ast.Program {
+	prog, err := loader.Load(file)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+	return prog
 }
 
 func mustParse(src string) *ast.Program {

@@ -1,0 +1,10 @@
+// A small library: imported declarations join the importing program.
+struct Greeting { who: text, count: int }
+
+function greet(name: text) -> text {
+    return "hello, " + name
+}
+
+function twice(n: int) -> int {
+    return n + n
+}
