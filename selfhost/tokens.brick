@@ -6,6 +6,9 @@
 
 struct Lexer {
     src: text,
+    // srcLen is src.len, cached: text.len compiles to strlen, so reading it
+    // once per character would make the scanner quadratic on large files.
+    srcLen: int,
     pos: int,
     readPos: int,
     ch: int,
@@ -27,7 +30,7 @@ struct Token {
 // ---------- scanning primitives ----------
 
 function readChar(l: &mut Lexer) {
-    if l.readPos >= l.src.len {
+    if l.readPos >= l.srcLen {
         l.ch = 0
     } else {
         l.ch = l.src[l.readPos]
@@ -45,7 +48,7 @@ function readChar(l: &mut Lexer) {
 // peekAt(0) is the byte right after ch; offset 1 is two bytes ahead, etc.
 function peekAt(l: &Lexer, offset: int) -> int {
     var i = l.readPos + offset
-    if i >= l.src.len {
+    if i >= l.srcLen {
         return 0
     }
     return l.src[i]
@@ -100,6 +103,15 @@ function byteString(c: int) -> bytes {
     var one = List(int)
     one.push(c)
     return bytes(one)
+}
+
+// oneText builds a one-byte text value from a byte value. It never slices the
+// source: slicing a text costs a strlen of the whole source, which would make
+// the scanner quadratic on large files.
+function oneText(c: int) -> text {
+    var one = List(int)
+    one.push(c)
+    return to_text(bytes(one))
 }
 
 // ---------- keywords ----------
@@ -175,23 +187,27 @@ function lookupIdent(lit: text) -> text {
 // ---------- multi-character tokens ----------
 
 function readIdentifier(l: &mut Lexer) -> text {
-    var start = l.pos
+    var b = Builder()
     while isLetter(l.ch) || isDigit(l.ch) {
+        b.add(oneText(l.ch))
         readChar(l)
     }
-    return slice(l.src, start, l.pos)
+    return b.build()
 }
 
 function readNumber(l: &mut Lexer, line: int, col: int) -> Token {
-    var start = l.pos
+    var b = Builder()
     var isFloat = false
     while isDigit(l.ch) {
+        b.add(oneText(l.ch))
         readChar(l)
     }
     if l.ch == '.' && isDigit(peekAt(l, 0)) {
         isFloat = true
+        b.add(".")
         readChar(l)
         while isDigit(l.ch) {
+            b.add(oneText(l.ch))
             readChar(l)
         }
     }
@@ -199,43 +215,43 @@ function readNumber(l: &mut Lexer, line: int, col: int) -> Token {
     if isFloat {
         kind = "FLOAT"
     }
-    return tok(kind, slice(l.src, start, l.pos), line, col)
+    return tok(kind, b.build(), line, col)
 }
 
 function readString(l: &mut Lexer, line: int, col: int) -> Token {
     readChar(l) // consume the opening quote
-    var buf = ""
+    var b = Builder()
     var codes = List(int)
     while l.ch != '"' && l.ch != 0 {
     if l.ch == '\\' {
         readChar(l)
         if l.ch == 'n' {
-            buf = buf + "\n"
+            b.add("\n")
             codes.push(10)
         } else if l.ch == 't' {
-            buf = buf + "\t"
+            b.add("\t")
             codes.push(9)
         } else if l.ch == 'r' {
-            buf = buf + "\r"
+            b.add("\r")
             codes.push(13)
         } else if l.ch == '\\' {
-            buf = buf + "\\"
+            b.add("\\")
             codes.push(92)
         } else if l.ch == '"' {
-        buf = buf + "\""
+        b.add("\"")
         codes.push(34)
     } else if l.ch == '0' {
         // A zero byte: text would drop it, so keep it in codes.
-        buf = buf + "\0"
+        b.add("\0")
         codes.push(0)
     } else {
-        buf = buf + "\\" + slice(l.src, l.pos, l.pos + 1)
+        b.add("\\" + oneText(l.ch))
         codes.push(92)
         codes.push(l.ch)
     }
     readChar(l)
 } else {
-    buf = buf + slice(l.src, l.pos, l.pos + 1)
+    b.add(oneText(l.ch))
     codes.push(l.ch)
     readChar(l)
 }
@@ -244,7 +260,7 @@ if l.ch != '"' {
 return tok("ILLEGAL", "unterminated string", line, col)
 }
 readChar(l) // consume the closing quote
-return tokRaw("STRING", buf, bytes(codes), line, col)
+return tokRaw("STRING", b.build(), bytes(codes), line, col)
 }
 
 function readCharLiteral(l: &mut Lexer, line: int, col: int) -> Token {
@@ -252,38 +268,38 @@ function readCharLiteral(l: &mut Lexer, line: int, col: int) -> Token {
     if l.ch == 0 || l.ch == '\n' {
         return tok("ILLEGAL", "unterminated character literal", line, col)
     }
-    var b = ""
+    var lb = ""
     var code = 0
     if l.ch == '\\' {
         readChar(l)
         if l.ch == 'n' {
-            b = "\n"
+            lb = "\n"
             code = 10
         } else if l.ch == 't' {
-            b = "\t"
+            lb = "\t"
             code = 9
         } else if l.ch == 'r' {
-            b = "\r"
+            lb = "\r"
             code = 13
         } else if l.ch == '\\' {
-            b = "\\"
+            lb = "\\"
             code = 92
         } else if l.ch == '\'' {
-            b = "'"
+            lb = "'"
             code = 39
         } else if l.ch == '"' {
-        b = "\""
+        lb = "\""
         code = 34
     } else if l.ch == '0' {
         // A zero byte: text would drop it, so keep code = 0.
-        b = "\0"
+        lb = "\0"
         code = 0
     } else {
         return tok("ILLEGAL", "unknown escape in character literal", line, col)
     }
     readChar(l)
 } else {
-    b = slice(l.src, l.pos, l.pos + 1)
+    lb = oneText(l.ch)
     code = l.ch
     readChar(l)
 }
@@ -291,7 +307,7 @@ if l.ch != '\'' {
     return tok("ILLEGAL", "character literal must hold exactly one byte", line, col)
 }
 readChar(l) // consume the closing quote
-return tokRaw("CHAR", b, byteString(code), line, col)
+return tokRaw("CHAR", lb, byteString(code), line, col)
 }
 
 // ---------- the scanner ----------
@@ -419,7 +435,7 @@ function nextToken(l: &mut Lexer) -> Token {
             return tok("&&", "&&", line, col)
         }
         // &mut, written with no space between & and mut (same lookahead as Go)
-        if l.ch == 'm' && peekAt(l, 0) == 'u' && l.pos + 3 < l.src.len && peekAt(l, 1) == 't' && !isIdentChar(peekAt(l, 2)) {
+        if l.ch == 'm' && peekAt(l, 0) == 'u' && l.pos + 3 < l.srcLen && peekAt(l, 1) == 't' && !isIdentChar(peekAt(l, 2)) {
             readChar(l)
             readChar(l)
             readChar(l)
@@ -443,7 +459,7 @@ if l.ch == '\'' {
     return readCharLiteral(l, line, col)
 }
 
-var p = l.pos
+var bad = oneText(l.ch)
 readChar(l)
-return tok("ILLEGAL", slice(l.src, p, p + 1), line, col)
+return tok("ILLEGAL", bad, line, col)
 }

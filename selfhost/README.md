@@ -105,6 +105,35 @@ and writes the same lines with the same indentation. The runtime prelude is not
 retyped — it is extracted verbatim into `runtime.brick` — so only the logic has
 to agree, not 400 lines of C.
 
+## Performance: `text.len` is a `strlen`
+
+`text` is `const char *` in the emitted C, so `.len` on a text lowers to
+`strlen(...)` — it is not stored anywhere. Reading `src.len` once per character
+inside the scanner therefore costs O(n) *per character*, which made the
+self-hosted compiler quadratic in the size of its input: 1,600 one-line
+functions took 0.6 s to compile and 6,400 took 15 s, doubling four times over.
+
+Two things keep that out of the hot paths now:
+
+- `Lexer` caches the source length in `srcLen`, set once when the lexer is
+  built, and `readChar` / `peekAt` compare against that.
+- Token literals are built from the bytes already read (`Builder` +
+  `oneText(c)`) instead of `slice(l.src, start, pos)`: a slice of `text` also
+  has to `strlen` the whole source to bounds-check, so even one slice per token
+  is quadratic.
+
+Both are local to the scanner; the emitted C is unchanged, so nothing else
+moves. Compiling a 6,400-function file went from 15 s to 0.2 s (~70x), and the
+scaling is now linear:
+
+| input | before | after |
+| --- | --- | --- |
+| 1,600 functions (~100 KB) | 0.62 s | 0.05 s |
+| 6,400 functions (~400 KB) | 14.7 s | 0.20 s |
+
+The same rule applies to any Brick program that walks a large `text`: `.len` and
+`slice` are both O(len of the text), so hoist the length into a variable.
+
 ## Byte-exact dumps: embedded NUL bytes
 
 Brick's `text` is a NUL-terminated C string, so it cannot carry an embedded

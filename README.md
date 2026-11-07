@@ -454,7 +454,8 @@ away:
 | `v0.3.22` | `getenv`; the self-hosted compiler builds and links programs by itself |
 | `v0.3.23` | `read_dir` / `is_dir`; `brickc` links `extern` companion C files |
 | `v0.3.24` | `builder.add(to_text(n))` appends digits straight into the buffer; `to_text` for ints no longer uses `snprintf` |
-| `v0.3.25` | `AGENTS.md` + the `brick-lang` agent skill: invariants, verification ladder, debugging playbook (current) |
+| `v0.3.25` | `AGENTS.md` + the `brick-lang` agent skill: invariants, verification ladder, debugging playbook |
+| `v0.3.26` | self-hosted compiler is linear again: cache `text.len` in the scanner, stop slicing the source per token (~70x on large inputs) (current) |
 
 ```sh
 git tag                     # list the tags
@@ -491,6 +492,13 @@ git clone brick-<date>.bundle brick      # restore it as a fresh repo
   `Builder`: `builder.add(to_text(n))` compiles to `brick_builder_add_int`, which
   writes the digits into the buffer directly, so building text allocates nothing
   per number (see `bench/`).
+- **`text.len` is a `strlen`, and so is `slice`.** A `text` is a plain
+  `const char *`, so its length is recomputed on demand. That is invisible in
+  ordinary code but fatal in a scanner that asks for it per character — it made
+  the self-hosted compiler quadratic in its input (15 s for a 6,400-function
+  file). The fix is to hoist the length into a field (`Lexer.srcLen`) and build
+  token literals byte by byte instead of slicing the source: ~70x faster, and
+  the emitted C does not change. See `selfhost/README.md`.
 
 ## Roadmap next steps
 

@@ -206,7 +206,7 @@ function newChecker() -> Checker {
 }
 
 function tokenize(src: text) -> List(Token) {
-    var l = Lexer{ src: src, pos: 0, readPos: 0, ch: 0, line: 1, col: 0 }
+    var l = Lexer{ src: src, srcLen: src.len, pos: 0, readPos: 0, ch: 0, line: 1, col: 0 }
     readChar(&mut l)
     var toks = List(Token)
     var done = false

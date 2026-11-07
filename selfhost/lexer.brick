@@ -38,7 +38,7 @@ function main() {
         return
     }
     var src = read_file(argv[1])
-    var l = Lexer{ src: src, pos: 0, readPos: 0, ch: 0, line: 1, col: 0 }
+    var l = Lexer{ src: src, srcLen: src.len, pos: 0, readPos: 0, ch: 0, line: 1, col: 0 }
     readChar(&mut l)
 
     var done = false

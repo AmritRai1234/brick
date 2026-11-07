@@ -170,6 +170,13 @@ change both — in which case change both, and let `make selfhost` and
   conversions (there are no implicit ones).
 - The interpreter is a second implementation: anything you rely on must behave
   the same there (`brick diff`), or examples will fail.
+- **`text.len` and `slice(text, ...)` are `strlen`.** A `text` is a plain
+  `const char *`, so length is recomputed every time it is asked for. Never read
+  `.len` of a big text inside a per-character/per-token loop and never slice a
+  big text per token — hoist the length into a field (`Lexer.srcLen`) and build
+  literals from bytes (`Builder` + a one-byte `text`). Reading `src.len` per
+  character is what made the self-hosted compiler quadratic (15 s → 0.2 s on a
+  6,400-function file).
 
 ## Performance work
 
@@ -180,6 +187,12 @@ adjust it. This machine is shared; single timings are meaningless, ratios are
 stable. Optimisations belong in the runtime (see the `Builder` integer fast
 path) rather than in exotic codegen, and must not change emitted C for programs
 that do not use the feature.
+
+Compiler throughput is a second dimension: time `./bin/brick emit FILE` (front
+end only) against the C build, and time the self-hosted `/tmp/brickc FILE -o -`
+on synthetic inputs of 400/1,600/6,400 generated functions to catch superlinear
+blowups. Emitted-C compiling dominates `brick build` (cc -O2 on a 4.5 kLOC file
+is ~1.4 s of a ~1.7 s build), so only the front end is worth optimizing.
 
 ## Versioning and rollback
 
