@@ -1,0 +1,1593 @@
+// Shared front end for the self-hosted compiler components.
+//
+// A Brick-written lexer/parser/checker core: it tokenizes, parses a .brick file
+// (resolving imports exactly like the Go loader) into a flat node arena, runs
+// the same semantic analysis as internal/checker, and records each expression's
+// inferred type on its node. The self-hosted checker and C emitter both import
+// this file and add their own output pass and main().
+//
+// The AST is a flat arena of Nodes referenced by index (Brick has no pointer
+// types; its spec prescribes "indices instead of pointers for linked data").
+// Types are carried as their canonical text form ("int", "List(int)", "&Point",
+// "Map(text, int)"), which makes type equality a string comparison.
+//
+// The scanner lives in tokens.brick, shared with the self-hosted lexer.
+
+import "tokens.brick"
+
+// ---------- text helpers ----------
+
+function isNumericText(t: text) -> bool {
+    return t == "int" || t == "float"
+}
+
+function nameOf(t: text) -> text {
+    var s = t
+    if s.len >= 1 && s[0] == '&' {
+        s = slice(s, 1, s.len)
+    }
+    var i = 0
+    while i < s.len {
+        if s[i] == '(' {
+            return slice(s, 0, i)
+        }
+        i = i + 1
+    }
+    return s
+}
+
+function isList(t: text) -> bool {
+    return t.len >= 5 && slice(t, 0, 4) == "List" && t[4] == '('
+}
+
+function listElem(t: text) -> text {
+    return slice(t, 5, t.len - 1)
+}
+
+function isMap(t: text) -> bool {
+    return t.len >= 4 && slice(t, 0, 3) == "Map" && t[3] == '('
+}
+
+// mapKey/mapVal split "Map(K, V)". Field types never contain ", " at the top
+// level in the examples, so a scan for the first ", " is enough.
+function mapKey(t: text) -> text {
+    var i = 4
+    var j = 4
+    while j + 1 < t.len - 1 {
+        if t[j] == ',' && t[j + 1] == ' ' {
+            return slice(t, i, j)
+        }
+        j = j + 1
+    }
+    return ""
+}
+
+function mapVal(t: text) -> text {
+    var j = 4
+    while j + 1 < t.len - 1 {
+        if t[j] == ',' && t[j + 1] == ' ' {
+            return slice(t, j + 2, t.len - 1)
+        }
+        j = j + 1
+    }
+    return ""
+}
+
+function indexOf(l: List(text), s: text) -> int {
+    var i = 0
+    while i < l.len {
+        if l[i] == s {
+            return i
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+function dirOf(path: text) -> text {
+    var i = path.len - 1
+    while i >= 0 {
+        if path[i] == '/' {
+            return slice(path, 0, i)
+        }
+        i = i - 1
+    }
+    return ""
+}
+
+function joinPath(dir: text, name: text) -> text {
+    if dir == "" {
+        return name
+    }
+    return dir + "/" + name
+}
+
+function importFileName(p: text) -> text {
+    if p.len >= 6 && slice(p, p.len - 6, p.len) == ".brick" {
+        return p
+    }
+    return p + ".brick"
+}
+
+// ---------- flat AST ----------
+//
+// One arena holds every node. `kind` distinguishes the cases; unused fields are
+// ignored. Child nodes are referenced by index (-1 means "none").
+
+struct Node {
+    kind: text,
+    line: int,
+    col: int,
+    name: text,   // ident/field/op/var/func/struct/enum name
+    s: text,      // secondary string (match variant)
+    e1: int,      // primary child: left / operand / base / cond / value / target
+    e2: int,      // secondary child: right / index / then / body / iter
+    e3: int,      // tertiary child: else
+    args: List(int),    // call args / block stmts / struct-lit values / arm nodes
+    names: List(text),  // param names / field names / variant names / binds
+    types: List(text),  // param types / struct field types / enum field types
+    t: text,      // declared / return / const type
+    flag: int,    // extern(1) / isWild(1)
+    ty: text,     // inferred type ("" = not inferred)
+}
+
+function nd(kind: text, line: int, col: int) -> Node {
+    return Node{
+        kind: kind, line: line, col: col, name: "", s: "",
+        e1: -1, e2: -1, e3: -1,
+        args: List(int), names: List(text), types: List(text),
+        t: "", flag: 0, ty: "",
+    }
+}
+
+struct Param {
+    name: text,
+    ty: text,
+}
+
+struct FuncInfo {
+    name: text,
+    pnames: List(text),
+    ptys: List(text),
+    ret: text,
+}
+
+struct StructInfo {
+    name: text,
+    fnames: List(text),
+    ftys: List(text),
+}
+
+struct EnumInfo {
+    name: text,
+    vnames: List(text),
+    vftys: List(text),  // all variant field types, flattened
+    counts: List(int),  // field count per variant
+}
+
+struct ConstInfo {
+    name: text,
+    ty: text,
+    lit: int,  // node index of the constant's value expression
+}
+
+struct Checker {
+    toks: List(Token),
+    pos: int,
+    noStructLit: int,
+    nodes: List(Node),
+    funcs: List(FuncInfo),
+    structs: List(StructInfo),
+    enums: List(EnumInfo),
+    consts: List(ConstInfo),
+    varNames: List(text),
+    varTys: List(text),
+    scopeBase: List(int),
+    out: List(text),
+    curRet: text,
+    inMain: int,
+}
+
+function newChecker() -> Checker {
+    return Checker{
+        toks: List(Token), pos: 0, noStructLit: 0,
+        nodes: List(Node), funcs: List(FuncInfo), structs: List(StructInfo),
+        enums: List(EnumInfo), consts: List(ConstInfo),
+        varNames: List(text), varTys: List(text), scopeBase: List(int),
+        out: List(text), curRet: "", inMain: 0,
+    }
+}
+
+function tokenize(src: text) -> List(Token) {
+    var l = Lexer{ src: src, pos: 0, readPos: 0, ch: 0, line: 1, col: 0 }
+    readChar(&mut l)
+    var toks = List(Token)
+    var done = false
+    while !done {
+        var t = nextToken(&mut l)
+        toks.push(t)
+        if t.kind == "EOF" {
+            done = true
+        }
+    }
+    return toks
+}
+
+// ---------- cursor helpers ----------
+
+function cur(c: &Checker) -> Token {
+    return c.toks[c.pos]
+}
+
+function advance(c: &mut Checker) -> Token {
+    var t = c.toks[c.pos]
+    if c.pos < c.toks.len - 1 {
+        c.pos = c.pos + 1
+    }
+    return t
+}
+
+function checkKind(c: &Checker, k: text) -> bool {
+    return cur(c).kind == k
+}
+
+function matchKind(c: &mut Checker, k: text) -> bool {
+    if checkKind(c, k) {
+        advance(c)
+        return true
+    }
+    return false
+}
+
+function describeTok(t: Token) -> text {
+    if t.kind == "EOF" {
+        return "end of file"
+    }
+    if t.kind == "ILLEGAL" {
+        return t.lit
+    }
+    if t.kind == "IDENT" || t.kind == "INT" || t.kind == "FLOAT" || t.kind == "STRING" || t.kind == "CHAR" {
+        return t.lit
+    }
+    return t.kind
+}
+
+function expect(c: &mut Checker, k: text) -> Token {
+    if !checkKind(c, k) {
+        var t = cur(c)
+        eprint(to_text(t.line) + ":" + to_text(t.col) + ": expected \"" + k + "\", found \"" + describeTok(t) + "\"")
+    }
+    return advance(c)
+}
+
+function mkn(c: &mut Checker, n: Node) -> int {
+    c.nodes.push(n)
+    return c.nodes.len - 1
+}
+
+// ---------- parser ----------
+
+function parseStmt(c: &mut Checker) -> int {
+    var k = cur(c).kind
+    if k == "function" {
+        return parseFuncDecl(c, false)
+    }
+    if k == "extern" {
+        advance(c)
+        return parseFuncDecl(c, true)
+    }
+    if k == "struct" {
+        return parseStructDecl(c)
+    }
+    if k == "enum" {
+        return parseEnumDecl(c)
+    }
+    if k == "match" {
+        return parseMatch(c)
+    }
+    if k == "var" {
+        return parseVarStmt(c)
+    }
+    if k == "const" {
+        return parseConstDecl(c)
+    }
+    if k == "if" {
+        return parseIf(c)
+    }
+    if k == "while" {
+        return parseWhile(c)
+    }
+    if k == "for" {
+        return parseFor(c)
+    }
+    if k == "arena" {
+        return parseArena(c)
+    }
+    if k == "break" {
+        var t = advance(c)
+        return mkn(c, nd("Break", t.line, t.col))
+    }
+    if k == "continue" {
+        var t = advance(c)
+        return mkn(c, nd("Continue", t.line, t.col))
+    }
+    if k == "return" {
+        return parseReturn(c)
+    }
+    if k == "{" {
+        return parseBlock(c)
+    }
+    return parseSimpleStmt(c)
+}
+
+function parseBlock(c: &mut Checker) -> int {
+    expect(c, "{")
+    var stmts = List(int)
+    while !checkKind(c, "}") && !checkKind(c, "EOF") {
+        matchKind(c, ";")
+        if checkKind(c, "}") {
+            break
+        }
+        stmts.push(parseStmt(c))
+    }
+    expect(c, "}")
+    var n = nd("Block", 0, 0)
+    n.args = stmts
+    return mkn(c, n)
+}
+
+function parseVarStmt(c: &mut Checker) -> int {
+    var vt = advance(c)
+    var name = expect(c, "IDENT")
+    var ty = ""
+    if matchKind(c, ":") {
+        ty = parseType(c)
+    }
+    expect(c, "=")
+    var v = parseExpr(c)
+    var n = nd("Var", vt.line, vt.col)
+    n.name = name.lit
+    n.t = ty
+    n.e1 = v
+    return mkn(c, n)
+}
+
+function parseConstDecl(c: &mut Checker) -> int {
+    var ct = advance(c)
+    var name = expect(c, "IDENT")
+    var ty = ""
+    if matchKind(c, ":") {
+        ty = parseType(c)
+    }
+    expect(c, "=")
+    var v = parseExpr(c)
+    var n = nd("Const", ct.line, ct.col)
+    n.name = name.lit
+    n.t = ty
+    n.e1 = v
+    return mkn(c, n)
+}
+
+function parseReturn(c: &mut Checker) -> int {
+    var rt = advance(c)
+    var n = nd("Return", rt.line, rt.col)
+    if !checkKind(c, "}") && !checkKind(c, "EOF") {
+        n.e1 = parseExpr(c)
+    }
+    return mkn(c, n)
+}
+
+function parseIf(c: &mut Checker) -> int {
+    var it = advance(c)
+    c.noStructLit = c.noStructLit + 1
+    var cond = parseExpr(c)
+    c.noStructLit = c.noStructLit - 1
+    var then = parseBlock(c)
+    var n = nd("If", it.line, it.col)
+    n.e1 = cond
+    n.e2 = then
+    if matchKind(c, "else") {
+        if checkKind(c, "if") {
+            n.e3 = parseIf(c)
+        } else {
+            n.e3 = parseBlock(c)
+        }
+    }
+    return mkn(c, n)
+}
+
+function parseWhile(c: &mut Checker) -> int {
+    var wt = advance(c)
+    c.noStructLit = c.noStructLit + 1
+    var cond = parseExpr(c)
+    c.noStructLit = c.noStructLit - 1
+    var body = parseBlock(c)
+    var n = nd("While", wt.line, wt.col)
+    n.e1 = cond
+    n.e2 = body
+    return mkn(c, n)
+}
+
+function parseFor(c: &mut Checker) -> int {
+    var ft = advance(c)
+    var name = expect(c, "IDENT")
+    expect(c, "in")
+    c.noStructLit = c.noStructLit + 1
+    var iter = parseExpr(c)
+    c.noStructLit = c.noStructLit - 1
+    var body = parseBlock(c)
+    var n = nd("For", ft.line, ft.col)
+    n.name = name.lit
+    n.e1 = iter
+    n.e2 = body
+    return mkn(c, n)
+}
+
+function parseArena(c: &mut Checker) -> int {
+    var at = advance(c)
+    var body = parseBlock(c)
+    var n = nd("Arena", at.line, at.col)
+    n.e1 = body
+    return mkn(c, n)
+}
+
+function parseSimpleStmt(c: &mut Checker) -> int {
+    var e = parseExpr(c)
+    if checkKind(c, "=") {
+        advance(c)
+        var v = parseExpr(c)
+        var n = nd("Assign", 0, 0)
+        n.e1 = e
+        n.e2 = v
+        return mkn(c, n)
+    }
+    var n = nd("ExprStmt", 0, 0)
+    n.e1 = e
+    return mkn(c, n)
+}
+
+function parseFuncDecl(c: &mut Checker, isExtern: bool) -> int {
+    var ft = expect(c, "function")
+    var name = expect(c, "IDENT")
+    expect(c, "(")
+    var pnames = List(text)
+    var ptys = List(text)
+    while !checkKind(c, ")") {
+        var pn = expect(c, "IDENT")
+        expect(c, ":")
+        pnames.push(pn.lit)
+        ptys.push(parseType(c))
+        if !matchKind(c, ",") {
+            break
+        }
+    }
+    expect(c, ")")
+    var ret = "void"
+    if matchKind(c, "->") {
+        ret = parseType(c)
+    }
+    var n = nd("Func", ft.line, ft.col)
+    n.name = name.lit
+    n.names = pnames
+    n.types = ptys
+    n.t = ret
+    if isExtern {
+        n.flag = 1
+        n.e1 = -1
+    } else {
+        n.e1 = parseBlock(c)
+    }
+    return mkn(c, n)
+}
+
+function parseStructDecl(c: &mut Checker) -> int {
+    var st = advance(c)
+    var name = expect(c, "IDENT")
+    expect(c, "{")
+    var fnames = List(text)
+    var ftys = List(text)
+    while !checkKind(c, "}") {
+        var fn = expect(c, "IDENT")
+        expect(c, ":")
+        fnames.push(fn.lit)
+        ftys.push(parseType(c))
+        if !matchKind(c, ",") {
+            break
+        }
+    }
+    expect(c, "}")
+    var n = nd("Struct", st.line, st.col)
+    n.name = name.lit
+    n.names = fnames
+    n.types = ftys
+    return mkn(c, n)
+}
+
+function parseEnumDecl(c: &mut Checker) -> int {
+    var et = advance(c)
+    var name = expect(c, "IDENT")
+    expect(c, "{")
+    var vnames = List(text)
+    var vftys = List(text)
+    var counts = List(int)
+    while !checkKind(c, "}") {
+        var vn = expect(c, "IDENT")
+        vnames.push(vn.lit)
+        var cnt = 0
+        if matchKind(c, "(") {
+            while !checkKind(c, ")") {
+                vftys.push(parseType(c))
+                cnt = cnt + 1
+                if !matchKind(c, ",") {
+                    break
+                }
+            }
+            expect(c, ")")
+        }
+        counts.push(cnt)
+        if !matchKind(c, ",") {
+            break
+        }
+    }
+    expect(c, "}")
+    var n = nd("Enum", et.line, et.col)
+    n.name = name.lit
+    n.names = vnames
+    n.types = vftys
+    n.args = counts
+    return mkn(c, n)
+}
+
+function parseMatch(c: &mut Checker) -> int {
+    var mt = advance(c)
+    c.noStructLit = c.noStructLit + 1
+    var scr = parseExpr(c)
+    c.noStructLit = c.noStructLit - 1
+    expect(c, "{")
+    var arms = List(int)
+    while !checkKind(c, "}") && !checkKind(c, "EOF") {
+        matchKind(c, ";")
+        if checkKind(c, "}") {
+            break
+        }
+        var patTok = cur(c)
+        var arm = nd("Pat", patTok.line, patTok.col)
+        if patTok.kind == "IDENT" && patTok.lit == "_" {
+            advance(c)
+            arm.flag = 1
+        } else {
+            var en = expect(c, "IDENT")
+            expect(c, ".")
+            var vn = expect(c, "IDENT")
+            arm.name = en.lit
+            arm.s = vn.lit
+            var binds = List(text)
+            if matchKind(c, "(") {
+                while !checkKind(c, ")") {
+                    binds.push(expect(c, "IDENT").lit)
+                    if !matchKind(c, ",") {
+                        break
+                    }
+                }
+                expect(c, ")")
+            }
+            arm.names = binds
+        }
+        expect(c, "=>")
+        if checkKind(c, "{") {
+            arm.e1 = parseBlock(c)
+        } else {
+            arm.e1 = parseStmt(c)
+        }
+        arms.push(mkn(c, arm))
+        matchKind(c, ",")
+    }
+    expect(c, "}")
+    var n = nd("Match", mt.line, mt.col)
+    n.e1 = scr
+    n.args = arms
+    return mkn(c, n)
+}
+
+function parseType(c: &mut Checker) -> text {
+    var ptr = false
+    if checkKind(c, "&") || checkKind(c, "&mut") {
+        ptr = true
+        advance(c)
+    }
+    var name = expect(c, "IDENT")
+    var base = name.lit
+    if name.lit == "List" && checkKind(c, "(") {
+        advance(c)
+        var elem = parseType(c)
+        expect(c, ")")
+        base = "List(" + elem + ")"
+    }
+    if ptr {
+        return "&" + base
+    }
+    return base
+}
+
+// ---------- expressions ----------
+
+function precOf(k: text) -> int {
+    if k == "||" {
+        return 1
+    }
+    if k == "&&" {
+        return 2
+    }
+    if k == "==" || k == "!=" {
+        return 3
+    }
+    if k == "<" || k == "<=" || k == ">" || k == ">=" {
+        return 4
+    }
+    if k == "+" || k == "-" {
+        return 5
+    }
+    if k == "*" || k == "/" || k == "%" {
+        return 6
+    }
+    return 0
+}
+
+function parseExpr(c: &mut Checker) -> int {
+    return parseBinary(c, 1)
+}
+
+function parseBinary(c: &mut Checker, minPrec: int) -> int {
+    var left = parseUnary(c)
+    var goOn = true
+    while goOn {
+        var op = cur(c)
+        var pr = precOf(op.kind)
+        if pr == 0 || pr < minPrec {
+            goOn = false
+        } else {
+            advance(c)
+            var right = parseBinary(c, pr + 1)
+            var n = nd("Binary", op.line, op.col)
+            n.name = op.lit
+            n.e1 = left
+            n.e2 = right
+            left = mkn(c, n)
+        }
+    }
+    return left
+}
+
+function parseUnary(c: &mut Checker) -> int {
+    var k = cur(c).kind
+    if k == "-" || k == "!" || k == "&" || k == "&mut" {
+        var op = advance(c)
+        var operand = parseUnary(c)
+        var n = nd("Unary", op.line, op.col)
+        n.name = op.lit
+        n.e1 = operand
+        return mkn(c, n)
+    }
+    return parsePostfix(c)
+}
+
+function parsePostfix(c: &mut Checker) -> int {
+    var e = parsePrimary(c)
+    var goOn = true
+    while goOn {
+        var k = cur(c).kind
+        if k == "(" {
+            var lp = advance(c)
+            var args = List(int)
+            while !checkKind(c, ")") {
+                args.push(parseExpr(c))
+                if !matchKind(c, ",") {
+                    break
+                }
+            }
+            expect(c, ")")
+            var n = nd("Call", lp.line, lp.col)
+            n.e1 = e
+            n.args = args
+            e = mkn(c, n)
+        } else if k == "." {
+            var dot = advance(c)
+            var name = expect(c, "IDENT")
+            var n = nd("Field", dot.line, dot.col)
+            n.e1 = e
+            n.name = name.lit
+            e = mkn(c, n)
+        } else if k == "[" {
+            var lb = advance(c)
+            var idx = parseExpr(c)
+            expect(c, "]")
+            var n = nd("Index", lb.line, lb.col)
+            n.e1 = e
+            n.e2 = idx
+            e = mkn(c, n)
+        } else {
+            goOn = false
+        }
+    }
+    return e
+}
+
+function parsePrimary(c: &mut Checker) -> int {
+    var tok = cur(c)
+    var k = tok.kind
+    if k == "INT" {
+        advance(c)
+        var ni = nd("Int", tok.line, tok.col)
+        ni.s = tok.lit
+        return mkn(c, ni)
+    }
+    if k == "FLOAT" {
+        advance(c)
+        var nf = nd("Float", tok.line, tok.col)
+        nf.s = tok.lit
+        return mkn(c, nf)
+    }
+    if k == "STRING" {
+        advance(c)
+        var ns = nd("String", tok.line, tok.col)
+        ns.s = tok.lit
+        return mkn(c, ns)
+    }
+    if k == "CHAR" {
+        advance(c)
+        var nc = nd("Int", tok.line, tok.col)
+        if tok.lit.len > 0 {
+            nc.s = to_text(tok.lit[0])
+        } else {
+            nc.s = "0"
+        }
+        return mkn(c, nc)
+    }
+    if k == "true" {
+        advance(c)
+        var nt = nd("Bool", tok.line, tok.col)
+        nt.flag = 1
+        return mkn(c, nt)
+    }
+    if k == "false" {
+        advance(c)
+        var nfa = nd("Bool", tok.line, tok.col)
+        nfa.flag = 0
+        return mkn(c, nfa)
+    }
+    if k == "(" {
+        advance(c)
+        var e = parseExpr(c)
+        expect(c, ")")
+        return e
+    }
+    if k == "IDENT" {
+        advance(c)
+        if checkKind(c, "{") && c.noStructLit == 0 {
+            return parseStructLit(c, tok)
+        }
+        var n = nd("Ident", tok.line, tok.col)
+        n.name = tok.lit
+        return mkn(c, n)
+    }
+    eprint(to_text(tok.line) + ":" + to_text(tok.col) + ": unexpected \"" + describeTok(tok) + "\"")
+    return mkn(c, nd("Int", tok.line, tok.col))
+}
+
+function parseStructLit(c: &mut Checker, nameTok: Token) -> int {
+    expect(c, "{")
+    var fnames = List(text)
+    var vals = List(int)
+    while !checkKind(c, "}") {
+        var fn = expect(c, "IDENT")
+        expect(c, ":")
+        vals.push(parseExpr(c))
+        fnames.push(fn.lit)
+        if !matchKind(c, ",") {
+            break
+        }
+    }
+    expect(c, "}")
+    var n = nd("StructLit", nameTok.line, nameTok.col)
+    n.name = nameTok.lit
+    n.names = fnames
+    n.args = vals
+    return mkn(c, n)
+}
+
+// ---------- import resolution (mirrors internal/loader) ----------
+
+struct Loaded {
+    top: List(int),
+    done: List(text),
+}
+
+function loadFile(c: &mut Checker, path: text, done: List(text)) -> Loaded {
+    var already = false
+    var i = 0
+    while i < done.len {
+        if done[i] == path {
+            already = true
+        }
+        i = i + 1
+    }
+    if already {
+        return Loaded{ top: List(int), done: done }
+    }
+    done.push(path)
+    var src = read_file(path)
+    c.toks = tokenize(src)
+    c.pos = 0
+    c.noStructLit = 0
+    var dir = dirOf(path)
+    var imports = List(text)
+    var bods = List(int)
+    while !checkKind(c, "EOF") {
+        matchKind(c, ";")
+        if checkKind(c, "EOF") {
+            break
+        }
+        if checkKind(c, "import") {
+            advance(c)
+            var pt = expect(c, "STRING")
+            imports.push(pt.lit)
+        } else {
+            bods.push(parseStmt(c))
+        }
+    }
+    var top = List(int)
+    i = 0
+    while i < imports.len {
+        var r = loadFile(c, joinPath(dir, importFileName(imports[i])), done)
+        var j = 0
+        while j < r.top.len {
+            top.push(r.top[j])
+            j = j + 1
+        }
+        done = r.done
+        i = i + 1
+    }
+    i = 0
+    while i < bods.len {
+        top.push(bods[i])
+        i = i + 1
+    }
+    return Loaded{ top: top, done: done }
+}
+
+// ---------- symbol tables ----------
+
+function findFunc(c: &Checker, name: text) -> int {
+    var i = 0
+    while i < c.funcs.len {
+        var f = c.funcs[i]
+        if f.name == name {
+            return i
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+function findStruct(c: &Checker, name: text) -> int {
+    var i = 0
+    while i < c.structs.len {
+        var s = c.structs[i]
+        if s.name == name {
+            return i
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+function findEnum(c: &Checker, name: text) -> int {
+    var i = 0
+    while i < c.enums.len {
+        var e = c.enums[i]
+        if e.name == name {
+            return i
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+function findConst(c: &Checker, name: text) -> int {
+    var i = 0
+    while i < c.consts.len {
+        var k = c.consts[i]
+        if k.name == name {
+            return i
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+function enumVariantFields(c: &Checker, ei: int, variant: text) -> List(text) {
+    var e = c.enums[ei]
+    var vi = indexOf(e.vnames, variant)
+    var out = List(text)
+    if vi < 0 {
+        return out
+    }
+    var base = 0
+    var j = 0
+    while j < vi {
+        base = base + e.counts[j]
+        j = j + 1
+    }
+    var k = 0
+    while k < e.counts[vi] {
+        out.push(e.vftys[base + k])
+        k = k + 1
+    }
+    return out
+}
+
+// ---------- scopes ----------
+
+function pushScope(c: &mut Checker) {
+    c.scopeBase.push(c.varNames.len)
+}
+
+function trimText(l: List(text), n: int) -> List(text) {
+    var out = List(text)
+    var i = 0
+    while i < n {
+        out.push(l[i])
+        i = i + 1
+    }
+    return out
+}
+
+function trimInt(l: List(int), n: int) -> List(int) {
+    var out = List(int)
+    var i = 0
+    while i < n {
+        out.push(l[i])
+        i = i + 1
+    }
+    return out
+}
+
+function popScope(c: &mut Checker) {
+    var b = c.scopeBase[c.scopeBase.len - 1]
+    c.varNames = trimText(c.varNames, b)
+    c.varTys = trimText(c.varTys, b)
+    c.scopeBase = trimInt(c.scopeBase, c.scopeBase.len - 1)
+}
+
+function declare(c: &mut Checker, name: text, t: text, line: int, col: int) {
+    var b = c.scopeBase[c.scopeBase.len - 1]
+    var i = b
+    while i < c.varNames.len {
+        if c.varNames[i] == name {
+            eprint(to_text(line) + ":" + to_text(col) + ": \"" + name + "\" is already declared in this scope")
+        }
+        i = i + 1
+    }
+    c.varNames.push(name)
+    c.varTys.push(t)
+}
+
+function lookupVar(c: &Checker, name: text) -> text {
+    var i = c.varNames.len - 1
+    while i >= 0 {
+        if c.varNames[i] == name {
+            return c.varTys[i]
+        }
+        i = i - 1
+    }
+    return ""
+}
+
+// ---------- pass 1: collect declarations ----------
+
+function evalConstNode(c: &mut Checker, idx: int) -> text {
+    var n = c.nodes[idx]
+    var k = n.kind
+    if k == "Int" {
+        return "int"
+    }
+    if k == "Float" {
+        return "float"
+    }
+    if k == "String" {
+        return "text"
+    }
+    if k == "Bool" {
+        return "bool"
+    }
+    if k == "Ident" {
+        var ci = findConst(c, n.name)
+        if ci < 0 {
+            eprint(to_text(n.line) + ":" + to_text(n.col) + ": \"" + n.name + "\" is not a constant")
+            return ""
+        }
+        var cc = c.consts[ci]
+        return cc.ty
+    }
+    if k == "Unary" {
+        var t = evalConstNode(c, n.e1)
+        if n.name == "-" {
+            if isNumericText(t) {
+                return t
+            }
+        }
+        if n.name == "!" {
+            if t == "bool" {
+                return "bool"
+            }
+        }
+        eprint(to_text(n.line) + ":" + to_text(n.col) + ": bad constant operator " + n.name)
+        return ""
+    }
+    if k == "Binary" {
+        var lt = evalConstNode(c, n.e1)
+        var rt = evalConstNode(c, n.e2)
+        var op = n.name
+        var cmp = op == "==" || op == "!=" || op == "<" || op == "<=" || op == ">" || op == ">="
+        if lt == "int" && rt == "int" {
+            if op == "+" || op == "-" || op == "*" || op == "/" || op == "%" {
+                return "int"
+            }
+            if cmp {
+                return "bool"
+            }
+        }
+        if lt == "float" && rt == "float" {
+            if op == "+" || op == "-" || op == "*" || op == "/" {
+                return "float"
+            }
+            if cmp {
+                return "bool"
+            }
+        }
+        if lt == "text" && rt == "text" {
+            if op == "+" {
+                return "text"
+            }
+            if cmp {
+                return "bool"
+            }
+        }
+        if lt == "bool" && rt == "bool" {
+            if op == "&&" || op == "||" || cmp {
+                return "bool"
+            }
+        }
+        eprint(to_text(n.line) + ":" + to_text(n.col) + ": bad constant expression")
+        return ""
+    }
+    return ""
+}
+
+function collect(c: &mut Checker, top: List(int)) {
+    var i = 0
+    while i < top.len {
+        var n = c.nodes[top[i]]
+        if n.kind == "Struct" {
+            c.structs.push(StructInfo{ name: n.name, fnames: n.names, ftys: n.types })
+        }
+        i = i + 1
+    }
+    i = 0
+    while i < top.len {
+        var n = c.nodes[top[i]]
+        if n.kind == "Enum" {
+            c.enums.push(EnumInfo{ name: n.name, vnames: n.names, vftys: n.types, counts: n.args })
+        }
+        i = i + 1
+    }
+    i = 0
+    while i < top.len {
+        var n = c.nodes[top[i]]
+        if n.kind == "Const" {
+            var ty = evalConstNode(c, n.e1)
+            if n.t != "" {
+                ty = n.t
+            }
+            c.consts.push(ConstInfo{ name: n.name, ty: ty, lit: n.e1 })
+        }
+        i = i + 1
+    }
+    i = 0
+    while i < top.len {
+        var n = c.nodes[top[i]]
+        if n.kind == "Func" {
+            c.funcs.push(FuncInfo{ name: n.name, pnames: n.names, ptys: n.types, ret: n.t })
+        }
+        i = i + 1
+    }
+}
+
+// ---------- pass 2: infer ----------
+
+function setTy(c: &mut Checker, idx: int, ty: text) {
+    var n = c.nodes[idx]
+    n.ty = ty
+    c.nodes[idx] = n
+}
+
+function infer(c: &mut Checker, idx: int) -> text {
+    var t = inferInner(c, idx)
+    setTy(c, idx, t)
+    return t
+}
+
+function inferInner(c: &mut Checker, idx: int) -> text {
+    var n = c.nodes[idx]
+    var k = n.kind
+    if k == "Int" {
+        return "int"
+    }
+    if k == "Float" {
+        return "float"
+    }
+    if k == "String" {
+        return "text"
+    }
+    if k == "Bool" {
+        return "bool"
+    }
+    if k == "Ident" {
+        var vt = lookupVar(c, n.name)
+        if vt != "" {
+            return vt
+        }
+        var ci = findConst(c, n.name)
+        if ci >= 0 {
+            var cc = c.consts[ci]
+            return cc.ty
+        }
+        eprint(to_text(n.line) + ":" + to_text(n.col) + ": undefined name \"" + n.name + "\"")
+        return ""
+    }
+    if k == "Unary" {
+        return inferUnary(c, idx)
+    }
+    if k == "Binary" {
+        return inferBinary(c, idx)
+    }
+    if k == "Call" {
+        return inferCall(c, idx)
+    }
+    if k == "Field" {
+        return inferField(c, idx)
+    }
+    if k == "Index" {
+        return inferIndex(c, idx)
+    }
+    if k == "StructLit" {
+        return inferStructLit(c, idx)
+    }
+    eprint("internal error: unhandled expression " + k)
+    return ""
+}
+
+function inferUnary(c: &mut Checker, idx: int) -> text {
+    var n = c.nodes[idx]
+    var t = infer(c, n.e1)
+    if n.name == "-" {
+        if !isNumericText(t) {
+            eprint(to_text(n.line) + ":" + to_text(n.col) + ": '-' needs a number, got " + t)
+        }
+        return t
+    }
+    if n.name == "!" {
+        if t != "bool" {
+            eprint(to_text(n.line) + ":" + to_text(n.col) + ": '!' needs bool, got " + t)
+        }
+        return "bool"
+    }
+    if n.name == "&" || n.name == "&mut" {
+        return "&" + t
+    }
+    return t
+}
+
+function inferBinary(c: &mut Checker, idx: int) -> text {
+    var n = c.nodes[idx]
+    var l = infer(c, n.e1)
+    var r = infer(c, n.e2)
+    var op = n.name
+    if op == "+" {
+        if l == "text" && r == "text" {
+            return "text"
+        }
+        if !isNumericText(l) || !isNumericText(r) {
+            eprint(to_text(n.line) + ":" + to_text(n.col) + ": '+' needs numbers or two texts")
+        }
+        if l != r {
+            eprint(to_text(n.line) + ":" + to_text(n.col) + ": '+' needs matching types")
+        }
+        return l
+    }
+    if op == "-" || op == "*" || op == "/" {
+        if !isNumericText(l) || !isNumericText(r) {
+            eprint(to_text(n.line) + ":" + to_text(n.col) + ": arithmetic needs numbers")
+        }
+        if l != r {
+            eprint(to_text(n.line) + ":" + to_text(n.col) + ": arithmetic needs matching types")
+        }
+        return l
+    }
+    if op == "%" {
+        return "int"
+    }
+    if op == "<" || op == "<=" || op == ">" || op == ">=" {
+        if !isNumericText(l) || l != r {
+            eprint(to_text(n.line) + ":" + to_text(n.col) + ": comparison needs two matching numbers")
+        }
+        return "bool"
+    }
+    if op == "==" || op == "!=" {
+        if l != r {
+            eprint(to_text(n.line) + ":" + to_text(n.col) + ": comparison needs matching types")
+        }
+        return "bool"
+    }
+    if op == "&&" || op == "||" {
+        if l != "bool" || r != "bool" {
+            eprint(to_text(n.line) + ":" + to_text(n.col) + ": logical operator needs bools")
+        }
+        return "bool"
+    }
+    return ""
+}
+
+function inferIndex(c: &mut Checker, idx: int) -> text {
+    var n = c.nodes[idx]
+    var bt = infer(c, n.e1)
+    infer(c, n.e2)
+    if isList(bt) {
+        return listElem(bt)
+    }
+    if bt == "text" {
+        return "int"
+    }
+    eprint(to_text(n.line) + ":" + to_text(n.col) + ": cannot index " + bt)
+    return ""
+}
+
+function inferField(c: &mut Checker, idx: int) -> text {
+    var n = c.nodes[idx]
+    var bn = c.nodes[n.e1]
+    if bn.kind == "Ident" && lookupVar(c, bn.name) == "" {
+        var ei = findEnum(c, bn.name)
+        if ei >= 0 {
+            var vf = enumVariantFields(c, ei, n.name)
+            if vf.len != 0 {
+                eprint(to_text(n.line) + ":" + to_text(n.col) + ": variant needs arguments")
+            }
+            return bn.name
+        }
+        eprint(to_text(bn.line) + ":" + to_text(bn.col) + ": undefined name \"" + bn.name + "\"")
+        return ""
+    }
+    var bt = infer(c, n.e1)
+    if n.name == "len" {
+        var nm = nameOf(bt)
+        if nm == "List" || nm == "text" || nm == "Map" || nm == "Builder" {
+            return "int"
+        }
+    }
+    var si = findStruct(c, nameOf(bt))
+    if si < 0 {
+        eprint(to_text(n.line) + ":" + to_text(n.col) + ": cannot access field \"" + n.name + "\" on " + bt)
+        return ""
+    }
+    var s = c.structs[si]
+    var fi = indexOf(s.fnames, n.name)
+    if fi < 0 {
+        eprint(to_text(n.line) + ":" + to_text(n.col) + ": struct " + nameOf(bt) + " has no field " + n.name)
+        return ""
+    }
+    return s.ftys[fi]
+}
+
+function inferStructLit(c: &mut Checker, idx: int) -> text {
+    var n = c.nodes[idx]
+    var si = findStruct(c, n.name)
+    if si < 0 {
+        eprint(to_text(n.line) + ":" + to_text(n.col) + ": unknown struct " + n.name)
+        return ""
+    }
+    var s = c.structs[si]
+    var i = 0
+    while i < n.args.len {
+        var vt = infer(c, n.args[i])
+        var fi = indexOf(s.fnames, n.names[i])
+        if fi >= 0 {
+            if vt != s.ftys[fi] {
+                eprint(to_text(n.line) + ":" + to_text(n.col) + ": field " + n.names[i] + " wants " + s.ftys[fi] + ", got " + vt)
+            }
+        }
+        i = i + 1
+    }
+    return n.name
+}
+
+function inferMapMethod(c: &mut Checker, idx: int, fieldName: text, bt: text) -> text {
+    var n = c.nodes[idx]
+    var kt = mapKey(bt)
+    var vt = mapVal(bt)
+    if fieldName == "set" {
+        if n.args.len != 2 {
+            eprint(to_text(n.line) + ":" + to_text(n.col) + ": set takes 2 arguments")
+        }
+        var ak = infer(c, n.args[0])
+        if ak != kt {
+            eprint(to_text(n.line) + ":" + to_text(n.col) + ": map key must be " + kt + ", got " + ak)
+        }
+        var av = infer(c, n.args[1])
+        if av != vt {
+            eprint(to_text(n.line) + ":" + to_text(n.col) + ": map value must be " + vt + ", got " + av)
+        }
+        return "void"
+    }
+    if fieldName == "get" {
+        var ak2 = infer(c, n.args[0])
+        if ak2 != kt {
+            eprint(to_text(n.line) + ":" + to_text(n.col) + ": map key must be " + kt + ", got " + ak2)
+        }
+        return vt
+    }
+    if fieldName == "has" {
+        var ak3 = infer(c, n.args[0])
+        if ak3 != kt {
+            eprint(to_text(n.line) + ":" + to_text(n.col) + ": map key must be " + kt + ", got " + ak3)
+        }
+        return "bool"
+    }
+    return "void"
+}
+
+function inferBuilderMethod(c: &mut Checker, idx: int, fieldName: text) -> text {
+    var n = c.nodes[idx]
+    if fieldName == "add" {
+        infer(c, n.args[0])
+        return "void"
+    }
+    if fieldName == "build" {
+        return "text"
+    }
+    eprint(to_text(n.line) + ":" + to_text(n.col) + ": Builder has no method " + fieldName)
+    return "void"
+}
+
+function inferCall(c: &mut Checker, idx: int) -> text {
+    var n = c.nodes[idx]
+    var cn = c.nodes[n.e1]
+    if cn.kind == "Field" {
+        var bn = c.nodes[cn.e1]
+        if cn.name == "push" {
+            var bt = infer(c, cn.e1)
+            if !isList(bt) {
+                eprint(to_text(n.line) + ":" + to_text(n.col) + ": push needs a List, got " + bt)
+            }
+            infer(c, n.args[0])
+            return "void"
+        }
+        if cn.name == "set" || cn.name == "get" || cn.name == "has" {
+            if bn.kind == "Ident" && lookupVar(c, bn.name) != "" {
+                var bt = infer(c, cn.e1)
+                if isMap(bt) {
+                    return inferMapMethod(c, idx, cn.name, bt)
+                }
+            }
+        }
+        if bn.kind == "Ident" && lookupVar(c, bn.name) != "" {
+            var bt2 = infer(c, cn.e1)
+            if bt2 == "Builder" {
+                return inferBuilderMethod(c, idx, cn.name)
+            }
+        }
+        if bn.kind == "Ident" && lookupVar(c, bn.name) == "" {
+            var ei = findEnum(c, bn.name)
+            if ei >= 0 {
+                var i = 0
+                while i < n.args.len {
+                    infer(c, n.args[i])
+                    i = i + 1
+                }
+                return bn.name
+            }
+        }
+    }
+    if cn.kind != "Ident" {
+        eprint(to_text(n.line) + ":" + to_text(n.col) + ": can only call named functions")
+        return ""
+    }
+    var nm = cn.name
+    if nm == "print" || nm == "eprint" {
+        infer(c, n.args[0])
+        return "void"
+    }
+    if nm == "read_file" {
+        infer(c, n.args[0])
+        return "text"
+    }
+    if nm == "write_file" {
+        infer(c, n.args[0])
+        infer(c, n.args[1])
+        return "void"
+    }
+    if nm == "args" {
+        return "List(text)"
+    }
+    if nm == "List" {
+        var an = c.nodes[n.args[0]]
+        return "List(" + an.name + ")"
+    }
+    if nm == "slice" {
+        infer(c, n.args[0])
+        infer(c, n.args[1])
+        infer(c, n.args[2])
+        return "text"
+    }
+    if nm == "to_text" {
+        infer(c, n.args[0])
+        return "text"
+    }
+    if nm == "Builder" {
+        return "Builder"
+    }
+    if nm == "Map" {
+        var a0 = c.nodes[n.args[0]]
+        var a1 = c.nodes[n.args[1]]
+        return "Map(" + a0.name + ", " + a1.name + ")"
+    }
+    var fi = findFunc(c, nm)
+    if fi < 0 {
+        eprint(to_text(n.line) + ":" + to_text(n.col) + ": undefined function \"" + nm + "\"")
+        return ""
+    }
+    var f = c.funcs[fi]
+    var i = 0
+    while i < n.args.len {
+        infer(c, n.args[i])
+        i = i + 1
+    }
+    return f.ret
+}
+
+// ---------- statements ----------
+
+function checkMatch(c: &mut Checker, idx: int) {
+    var n = c.nodes[idx]
+    var st = infer(c, n.e1)
+    var ei = findEnum(c, st)
+    var i = 0
+    while i < n.args.len {
+        var arm = c.nodes[n.args[i]]
+        if arm.flag == 1 {
+            pushScope(c)
+            checkStmt(c, arm.e1)
+            popScope(c)
+        } else {
+            var fields = List(text)
+            if ei >= 0 {
+                fields = enumVariantFields(c, ei, arm.s)
+            }
+            pushScope(c)
+            var j = 0
+            while j < arm.names.len {
+                var ft = "int"
+                if j < fields.len {
+                    ft = fields[j]
+                }
+                declare(c, arm.names[j], ft, arm.line, arm.col)
+                j = j + 1
+            }
+            checkStmt(c, arm.e1)
+            popScope(c)
+        }
+        i = i + 1
+    }
+}
+
+function checkStmt(c: &mut Checker, idx: int) {
+    if idx < 0 {
+        return
+    }
+    var n = c.nodes[idx]
+    var k = n.kind
+    if k == "Var" {
+        var vt = infer(c, n.e1)
+        if n.t != "" {
+            if n.t != vt {
+                eprint(to_text(n.line) + ":" + to_text(n.col) + ": cannot assign " + vt + " to " + n.t)
+            }
+            vt = n.t
+        }
+        declare(c, n.name, vt, n.line, n.col)
+    } else if k == "Assign" {
+        infer(c, n.e1)
+        infer(c, n.e2)
+    } else if k == "Return" {
+        if n.e1 >= 0 {
+            var vt = infer(c, n.e1)
+            if c.curRet == "void" {
+                eprint(to_text(n.line) + ":" + to_text(n.col) + ": cannot return a value from a void function")
+            }
+            if vt != c.curRet {
+                eprint(to_text(n.line) + ":" + to_text(n.col) + ": cannot return " + vt + " from " + c.curRet)
+            }
+        } else {
+            if c.curRet != "void" {
+                eprint(to_text(n.line) + ":" + to_text(n.col) + ": function must return " + c.curRet)
+            }
+        }
+    } else if k == "ExprStmt" {
+        infer(c, n.e1)
+    } else if k == "Block" {
+        pushScope(c)
+        var i = 0
+        while i < n.args.len {
+            checkStmt(c, n.args[i])
+            i = i + 1
+        }
+        popScope(c)
+    } else if k == "If" {
+        infer(c, n.e1)
+        checkStmt(c, n.e2)
+        if n.e3 >= 0 {
+            checkStmt(c, n.e3)
+        }
+    } else if k == "While" {
+        infer(c, n.e1)
+        checkStmt(c, n.e2)
+    } else if k == "Arena" {
+        checkStmt(c, n.e1)
+    } else if k == "For" {
+        var it = infer(c, n.e1)
+        var et = "int"
+        if isList(it) {
+            et = listElem(it)
+        }
+        pushScope(c)
+        declare(c, n.name, et, n.line, n.col)
+        checkStmt(c, n.e2)
+        popScope(c)
+    } else if k == "Match" {
+        checkMatch(c, idx)
+    }
+}
+
+function checkFunc(c: &mut Checker, idx: int) {
+    var n = c.nodes[idx]
+    c.curRet = n.t
+    if n.name == "main" {
+        c.inMain = 1
+    } else {
+        c.inMain = 0
+    }
+    pushScope(c)
+    var i = 0
+    while i < n.names.len {
+        declare(c, n.names[i], n.types[i], n.line, n.col)
+        i = i + 1
+    }
+    var body = c.nodes[n.e1]
+    i = 0
+    while i < body.args.len {
+        checkStmt(c, body.args[i])
+        i = i + 1
+    }
+    popScope(c)
+    c.inMain = 0
+}
+
+function checkBodies(c: &mut Checker, top: List(int)) {
+    var i = 0
+    while i < top.len {
+        var n = c.nodes[top[i]]
+        if n.kind == "Func" && n.flag == 0 && n.e1 >= 0 {
+            checkFunc(c, top[i])
+        }
+        i = i + 1
+    }
+}

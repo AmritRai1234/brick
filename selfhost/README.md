@@ -14,6 +14,7 @@ example, so the two can never drift:
 | Lexer | `lexer.brick` | `brick tokdump` | `brick run selfhost/lexer.brick` |
 | Parser | `parser.brick` | `brick ast` | `brick run selfhost/parser.brick` |
 | Checker | `checker.brick` | `brick typedump` | `brick run selfhost/checker.brick` |
+| C emitter | `emitter.brick` | `brick emit` | `brick run selfhost/emitter.brick` |
 
 `brick tokdump` prints a canonical, escape-free token dump — each line is
 `line col KIND nbytes b0 b1 ...`, the literal written as decimal byte values so
@@ -21,22 +22,35 @@ no quoting or escaping rules have to agree between Go and Brick. `brick ast`
 prints the tree as indented text. `brick typedump` prints the inferred type of
 every expression, one `line:col KIND type` line each, in source order — a
 fingerprint of the checker's work with no formatting left to agree on.
+`brick emit` prints the generated C, so the C emitter is checked by diffing the
+whole program text.
 
 ```sh
 make selfhost        # build every component, run it, diff every example
+make selfhost-e2e    # compile examples with the Brick emitter, run them, compare
 ```
 
-All three currently match on **every** `examples/*.brick` file.
+All four currently match on **every** `examples/*.brick` file. `make
+selfhost-e2e` goes further: it uses the Brick-written emitter as the compiler,
+builds its C with the system C compiler, runs the binary, and checks the program
+behaves the same as one built by the Go compiler.
 
 ## Layout
 
-- `tokens.brick` — the scanner, shared by all three components.
+- `tokens.brick` — the scanner, shared by every component.
+- `frontend.brick` — the shared front end: tokenize, parse into a flat node
+  arena, resolve imports like `internal/loader`, and run the checker's semantic
+  analysis (so every expression node carries its inferred type). Imported by the
+  self-hosted checker and C emitter, which add their own output pass and `main`.
 - `lexer.brick` — the token-dump front end (`import "tokens.brick"`).
 - `parser.brick` — the parser + AST dumper (`import "tokens.brick"`); it also
   resolves imports exactly like `internal/loader`.
-- `checker.brick` — the checker + inferred-type dumper (`import "tokens.brick"`);
-  it resolves imports, parses, runs the same semantic analysis, and prints the
-  `brick typedump` fingerprint.
+- `checker.brick` — the checker + inferred-type dumper (`import "frontend.brick"`);
+  it prints the `brick typedump` fingerprint.
+- `emitter.brick` — the C backend (`import "frontend.brick"` and
+  `"runtime.brick"`); it prints the same C as `brick emit`.
+- `runtime.brick` — the C runtime prelude, stored verbatim (as string literals)
+  so the emitter emits the exact same bytes the Go compiler does.
 
 The parser renders the dump text directly during recursive descent instead of
 building an AST: each parse function returns its node's dump text indented
@@ -51,6 +65,12 @@ pointers for linked data" — it builds a **flat arena**: every node lives in a
 `List(Node)` and children are referenced by `int` index. Types are likewise kept
 as canonical text (`"int"`, `"List(int)"`, `"&Point"`, `"Map(text, int)"`), so
 type equality is a string compare.
+
+The C emitter reuses that arena: after `collect` and the body check have filled
+in every node's type, it walks the tree in the same order as `internal/codegen`
+and writes the same lines with the same indentation. The runtime prelude is not
+retyped — it is extracted verbatim into `runtime.brick` — so only the logic has
+to agree, not 400 lines of C.
 
 ## Known gap: embedded NUL bytes
 
@@ -72,7 +92,7 @@ faithfully and is tracked as the next self-hosting step.
 | Lexer | done — matches `brick tokdump` on all examples |
 | Parser (+ AST dump) | done — matches `brick ast` on all examples |
 | Checker (+ type dump) | done — matches `brick typedump` on all examples |
-| C emitter | planned (`brick emit`) |
+| C emitter | done — matches `brick emit` on all examples |
 
 ## Building a component by hand
 
