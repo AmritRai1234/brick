@@ -316,3 +316,10 @@ func TestForContinueLabel(t *testing.T) {
 		t.Errorf("continue should emit a continue label\n%s", out)
 	}
 }
+
+func TestCharLiteralCodegen(t *testing.T) {
+	out := gen(t, `function main() { print('a') }`)
+	if !strings.Contains(out, "(long long)(97)") {
+		t.Errorf("'a' should lower to the int 97\n%s", out)
+	}
+}

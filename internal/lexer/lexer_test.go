@@ -56,3 +56,36 @@ func TestLineCol(t *testing.T) {
 		t.Errorf("x at %d:%d, want 2:1", got[1].Line, got[1].Col)
 	}
 }
+
+func TestCharLiterals(t *testing.T) {
+	cases := []struct {
+		src  string
+		want string
+	}{
+		{`'a'`, "a"},
+		{`'\n'`, "\n"},
+		{`'\t'`, "\t"},
+		{`'\''`, "'"},
+		{`'\\'`, "\\"},
+		{`'0'`, "0"},
+	}
+	for _, c := range cases {
+		got := New(c.src).Tokens()
+		if got[0].Type != token.CHAR {
+			t.Errorf("%s: want CHAR, got %s", c.src, got[0].Type)
+			continue
+		}
+		if got[0].Literal != c.want {
+			t.Errorf("%s: literal %q, want %q", c.src, got[0].Literal, c.want)
+		}
+	}
+}
+
+func TestCharLiteralErrors(t *testing.T) {
+	for _, src := range []string{`'ab'`, `'a`, `''`, `'\q'`} {
+		got := New(src).Tokens()
+		if got[0].Type != token.ILLEGAL {
+			t.Errorf("%s: want ILLEGAL, got %s", src, got[0].Type)
+		}
+	}
+}

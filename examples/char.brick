@@ -1,0 +1,20 @@
+// Character literals: 'a' is just the byte value (97). Text indexing already
+// yields ints, so a char literal compares and indexes naturally.
+function main() {
+    print('a')     // 97
+    print('\n')    // 10 (the newline byte as a number)
+    print('\'')    // 39
+    print('0')     // 48
+
+    var word = "brick"
+    var vowels = 0
+    var i = 0
+    while i < word.len {
+        var c = word[i]
+        if c == 'i' {
+            vowels = vowels + 1
+        }
+        i = i + 1
+    }
+    print(vowels)  // 1
+}

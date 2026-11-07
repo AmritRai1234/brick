@@ -171,3 +171,20 @@ func TestParseFor(t *testing.T) {
 		t.Fatalf("body not parsed: %+v", fs.Body)
 	}
 }
+
+func TestParseCharLiteral(t *testing.T) {
+	prog, err := Parse(`function main() { print('a') }`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fd := prog.Stmts[0].(*ast.FuncDecl)
+	call := fd.Body.Stmts[0].(*ast.ExprStmt)
+	c := call.X.(*ast.CallExpr)
+	lit, ok := c.Args[0].(*ast.IntLit)
+	if !ok {
+		t.Fatalf("char literal should parse to an IntLit, got %T", c.Args[0])
+	}
+	if lit.Value != 97 {
+		t.Errorf("'a' = %d, want 97", lit.Value)
+	}
+}

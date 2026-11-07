@@ -13,6 +13,7 @@ const (
 	INT
 	FLOAT
 	STRING
+	CHAR
 	IDENT
 
 	// keywords
@@ -70,7 +71,7 @@ const (
 
 var names = map[Type]string{
 	ILLEGAL: "ILLEGAL", EOF: "EOF", NEWLINE: "NEWLINE",
-	INT: "INT", FLOAT: "FLOAT", STRING: "STRING", IDENT: "IDENT",
+	INT: "INT", FLOAT: "FLOAT", STRING: "STRING", CHAR: "CHAR", IDENT: "IDENT",
 	VAR: "var", CONST: "const", FUNCTION: "function", IF: "if", ELSE: "else",
 	WHILE: "while", FOR: "for", IN: "in",
 	BREAK: "break", CONTINUE: "continue",

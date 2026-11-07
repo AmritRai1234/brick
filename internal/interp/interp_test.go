@@ -251,3 +251,20 @@ func TestFor(t *testing.T) {
 	}`
 	mustRun(t, src, "1\n104\n105")
 }
+
+func TestCharLiteral(t *testing.T) {
+	src := `
+	function main() {
+		print('a')     // 97
+		print('\n')    // 10
+		var s = "brick"
+		var n = 0
+		var i = 0
+		while i < s.len {
+			if s[i] == 'i' { n = n + 1 }
+			i = i + 1
+		}
+		print(n)       // 1
+	}`
+	mustRun(t, src, "97\n10\n1")
+}

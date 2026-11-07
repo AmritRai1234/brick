@@ -195,6 +195,9 @@ func (l *Lexer) NextToken() token.Token {
 	if l.ch == '"' {
 		return l.readString(line, col)
 	}
+	if l.ch == '\'' {
+		return l.readCharLiteral(line, col)
+	}
 
 	ch := l.ch
 	l.readChar()
@@ -276,10 +279,54 @@ func (l *Lexer) readString(line, col int) token.Token {
 	}
 	_ = start
 	if l.ch != '"' {
-		return token.Token{Type: token.ILLEGAL, Literal: fmt.Sprintf("unterminated string at %d:%d", line, col), Line: line, Col: col}
+		return token.Token{Type: token.ILLEGAL, Literal: "unterminated string", Line: line, Col: col}
 	}
 	l.readChar() // consume closing quote
 	return token.Token{Type: token.STRING, Literal: string(buf), Line: line, Col: col}
+}
+
+// readCharLiteral scans a single-quoted byte literal such as 'a', '\n' or
+// '\”. The Literal holds the decoded one-byte string; the parser turns it into
+// an int, since a byte is an int in Brick (text indexing yields ints).
+func (l *Lexer) readCharLiteral(line, col int) token.Token {
+	bad := func(msg string) token.Token {
+		return token.Token{Type: token.ILLEGAL, Literal: msg, Line: line, Col: col}
+	}
+	l.readChar() // consume opening quote
+	if l.ch == 0 || l.ch == '\n' {
+		return bad("unterminated character literal")
+	}
+	var b byte
+	if l.ch == '\\' {
+		l.readChar()
+		switch l.ch {
+		case 'n':
+			b = '\n'
+		case 't':
+			b = '\t'
+		case 'r':
+			b = '\r'
+		case '\\':
+			b = '\\'
+		case '\'':
+			b = '\''
+		case '"':
+			b = '"'
+		case '0':
+			b = 0
+		default:
+			return bad(fmt.Sprintf("unknown escape \\%c in character literal", l.ch))
+		}
+		l.readChar()
+	} else {
+		b = l.ch
+		l.readChar()
+	}
+	if l.ch != '\'' {
+		return bad("character literal must hold exactly one byte")
+	}
+	l.readChar() // consume closing quote
+	return token.Token{Type: token.CHAR, Literal: string([]byte{b}), Line: line, Col: col}
 }
 
 func isLetter(ch byte) bool {

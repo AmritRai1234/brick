@@ -241,7 +241,8 @@ Mapped to the roadmap in the spec (§15):
       brace. Arena-local names do not escape the block (see `examples/arena.brick`).
 - [x] **Collections and text** — `List(T)` (growable: `push`, indexing, `.len`,
       assign to an index) and text (`.len`, `s[i]` as a byte, `+` concatenation,
-      `==` / `!=`). These are the pieces a lexer and parser are built from.
+      `==` / `!=`), plus character literals (`'a'` = 97) so byte-wise scanning
+      reads clearly. These are the pieces a lexer and parser are built from.
 - [x] **7. Formatter and language server** — the formatter (`brick fmt`,
       `make fmt-check`) normalizes indentation (four spaces per level) and strips
       trailing whitespace while preserving every comment. `brick lsp` runs a
@@ -314,6 +315,8 @@ Brick-written compiler would need.
 - `while` and `for ... in` with `break` / `continue`
 - borrowing (`&`, `&mut`) — e.g. `&mut xs[0]` passed into a function
 - structs holding lists, and `xs[i].field = v`
+- character literals (`'a'`, `'\n'`) — a byte literal that is just its `int`
+  value, so it compares and indexes naturally with `text`
 - reading and writing files (`read_file`, `write_file`), command-line `args()`
 - `import "path"` — pull another file's declarations into the program
 - `Builder()` (`add`, `build`) and `to_text(int)` — assemble output without
@@ -324,9 +327,7 @@ Brick-written compiler would need.
 
 **Still missing (in rough priority order)**
 
-1. character literals (`'a'`) — today `s[i]` yields an `int` byte, which works
-   but reads poorly.
-2. `to_text` for `float` and `bool` — today it takes only an `int`.
+1. `to_text` for `float` and `bool` — today it takes only an `int`.
 
 Each will land the same way as the features above: implemented across the lexer
 /parser/checker/codegen/interpreter, with an example that `make diff` proves the
@@ -350,7 +351,8 @@ away:
 | `v0.3.3` | `import` / multi-file programs |
 | `v0.3.4` | text `Builder` + `to_text(int)` |
 | `v0.3.5` | top-level `const` |
-| `v0.3.6` | `for x in xs { ... }` (current) |
+| `v0.3.6` | `for x in xs { ... }` |
+| `v0.3.7` | character literals (`'a'`) (current) |
 
 ```sh
 git tag                     # list the tags

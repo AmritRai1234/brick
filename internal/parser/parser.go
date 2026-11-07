@@ -88,7 +88,9 @@ func describe(t token.Token) string {
 	switch t.Type {
 	case token.EOF:
 		return "end of file"
-	case token.IDENT, token.INT, token.FLOAT, token.STRING:
+	case token.ILLEGAL:
+		return t.Literal
+	case token.IDENT, token.INT, token.FLOAT, token.STRING, token.CHAR:
 		return t.Literal
 	default:
 		return t.Type.String()
@@ -528,6 +530,11 @@ func (p *Parser) parsePrimary() ast.Expr {
 	case token.STRING:
 		p.advance()
 		e := &ast.StringLit{Value: tok.Literal}
+		ast.SetBase(e, tok)
+		return e
+	case token.CHAR:
+		p.advance()
+		e := &ast.IntLit{Value: int64(tok.Literal[0])}
 		ast.SetBase(e, tok)
 		return e
 	case token.TRUE, token.FALSE:
