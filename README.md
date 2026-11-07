@@ -351,6 +351,8 @@ internal/lsp/        language server (JSON-RPC over stdio)
 docs/SPEC.md        the language design notes
 examples/           runnable Brick programs
 bench/              the same three workloads in Brick, C, C++ and Rust (make bench)
+AGENTS.md           working notes for AI agents: rules, commands, debugging playbook
+.agents/skills/brick-lang/  the same as a loadable skill, plus verify.sh (the gate)
 ```
 
 ## Testing
@@ -451,7 +453,8 @@ away:
 | `v0.3.21` | `system(argv)`: run a program without a shell and read its exit status |
 | `v0.3.22` | `getenv`; the self-hosted compiler builds and links programs by itself |
 | `v0.3.23` | `read_dir` / `is_dir`; `brickc` links `extern` companion C files |
-| `v0.3.24` | `builder.add(to_text(n))` appends digits straight into the buffer; `to_text` for ints no longer uses `snprintf` (current) |
+| `v0.3.24` | `builder.add(to_text(n))` appends digits straight into the buffer; `to_text` for ints no longer uses `snprintf` |
+| `v0.3.25` | `AGENTS.md` + the `brick-lang` agent skill: invariants, verification ladder, debugging playbook (current) |
 
 ```sh
 git tag                     # list the tags
