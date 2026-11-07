@@ -96,39 +96,40 @@ and writes the same lines with the same indentation. The runtime prelude is not
 retyped — it is extracted verbatim into `runtime.brick` — so only the logic has
 to agree, not 400 lines of C.
 
-## Known gap: embedded NUL bytes
+## Byte-exact dumps: embedded NUL bytes
 
 Brick's `text` is a NUL-terminated C string, so it cannot carry an embedded
-`\0`. A string or character literal whose value contains a NUL therefore
-truncates in the Brick lexer (e.g. `"a\0b"` yields `a b` instead of `a NUL b`),
-while the Go lexer keeps all three bytes. Brick programs cannot use such a
-literal at runtime as `text` (the same truncation happens in generated code),
-so this only shows up in the token dump.
+`\0`. The language has a length-carrying byte-string type, `bytes`, which can
+hold NUL and any byte 0..255, plus a `print_bytes` builtin that writes those
+bytes to stdout unchanged (no truncation, no added newline). The self-hosted
+front end and code generator understand both, and `examples/bytes.brick`
+exercises them end to end.
 
-The language has a length-carrying byte-string type, `bytes`, which can hold
-NUL and any byte 0..255; the self-hosted front end and code generator
-understand it, and `examples/bytes.brick` exercises it end to end.
+Every dump the self-hosted components produce now travels as `bytes`:
 
-The self-hosted lexer now carries each token's literal as `bytes` (`Token.raw`),
-building it byte-by-byte in `readString` and `readCharLiteral`, while `lit`
-stays `text` for the parser's convenience. So `brick tokdump` matches the Go
-lexer even for `"\0"`: `make selfhost` diffs the lexer over `selfhost/*.brick`
-too, and those sources contain such literals.
+- The lexer carries each token's literal as `bytes` (`Token.raw`), built
+  byte-by-byte in `readString` and `readCharLiteral`, while `lit` stays `text`
+  for the parser's convenience.
+- The AST keeps a string literal's exact bytes in `Node.rb`, and the parser
+  hides tab, newline and NUL as `\t0`/`\t1`/`\t2` while the block is indented
+  as `text`, restoring them with `print_bytes` at the end.
+- The emitter quotes string literals from `n.rb` (`cQuote(s: bytes)`), so NUL
+  becomes the same fixed-width `\000` octal escape the Go emitter emits.
 
-The AST and type dumps are still assembled and printed as `text`. A source
-whose string literal value contains a NUL would truncate there, so those checks
-stay limited to the examples. Moving the dumps to `bytes` and printing them
-byte-wise is the remaining piece for a fully byte-exact front end.
+As a result `brick tokdump`, `brick ast`, `brick typedump` and `brick emit` all
+match byte-for-byte, on the examples *and* on `selfhost/*.brick` — the sources
+that actually contain `\0` literals. `make selfhost` diffs all five components
+over both sets.
 
 ## Status
 
 | Component | Status |
 | --- | --- |
 | Lexer | done — matches `brick tokdump` on all examples and on `selfhost/*.brick`, including `\0` literals |
-| Parser (+ AST dump) | done — matches `brick ast` on all examples |
-| Checker (+ type dump) | done — matches `brick typedump` on all examples |
-| C emitter | done — matches `brick emit` on all examples, including `bytes` |
-| Single compiler (`brickc`) | done — source in, C out; C compiles and runs like the Go compiler's |
+| Parser (+ AST dump) | done — matches `brick ast` on all examples and on `selfhost/*.brick`, including `\0` literals |
+| Checker (+ type dump) | done — matches `brick typedump` on all examples and on `selfhost/*.brick` |
+| C emitter | done — matches `brick emit` on all examples and on `selfhost/*.brick`, including `bytes` and `\0` literals |
+| Single compiler (`brickc`) | done — source in, C out; matches `brick emit` on every input and compiles and runs like the Go compiler's |
 
 ## Building a component by hand
 

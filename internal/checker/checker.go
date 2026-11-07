@@ -736,6 +736,15 @@ func (c *Checker) inferCall(ex *ast.CallExpr) ast.Type {
 		}
 		return voidT
 	}
+	if id.Name == "print_bytes" {
+		if len(ex.Args) != 1 {
+			c.errorf(ex, "print_bytes takes exactly 1 argument (bytes), got %d", len(ex.Args))
+		}
+		if at := c.infer(ex.Args[0]); !at.Equals(bytesT) {
+			c.errorf(ex, "print_bytes expects bytes, got %s", at)
+		}
+		return voidT
+	}
 	if id.Name == "eprint" {
 		if len(ex.Args) != 1 {
 			c.errorf(ex, "eprint takes exactly 1 argument, got %d", len(ex.Args))

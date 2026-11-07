@@ -54,7 +54,9 @@ native: build
 # checked against the Go compiler over every example: the lexer against
 # `brick tokdump`, the parser against `brick ast`, the checker against
 # `brick typedump`, and the C emitter against `brick emit`. brickc is the whole
-# pipeline as one program; its output must match `brick emit` too.
+# pipeline as one program; its output must match `brick emit` too. The same
+# checks run over the selfhost sources themselves, which contain literals with
+# embedded NUL bytes.
 selfhost: build
 	@./bin/brick build selfhost/lexer.brick -o /tmp/brick-lex >/dev/null || exit 1
 	@./bin/brick build selfhost/parser.brick -o /tmp/brick-parse >/dev/null || exit 1
@@ -81,11 +83,23 @@ selfhost: build
 	done; \
 	for f in selfhost/*.brick; do \
 		if ! diff <(/tmp/brick-lex "$$f") <(./bin/brick tokdump "$$f"); then \
-			echo "selfhost lexer MISMATCH (NUL-carrying literal): $$f"; fail=1; \
+			echo "selfhost lexer MISMATCH (self source): $$f"; fail=1; \
+		fi; \
+		if ! diff <(/tmp/brick-parse "$$f") <(./bin/brick ast "$$f"); then \
+			echo "selfhost parser MISMATCH (self source): $$f"; fail=1; \
+		fi; \
+		if ! diff <(/tmp/brick-check "$$f") <(./bin/brick typedump "$$f"); then \
+			echo "selfhost checker MISMATCH (self source): $$f"; fail=1; \
+		fi; \
+		if ! diff <(/tmp/brick-emit "$$f") <(./bin/brick emit "$$f"); then \
+			echo "selfhost emitter MISMATCH (self source): $$f"; fail=1; \
+		fi; \
+		if ! diff <(/tmp/brickc "$$f" -o -) <(./bin/brick emit "$$f"); then \
+			echo "selfhost brickc MISMATCH (self source): $$f"; fail=1; \
 		fi; \
 	done; \
 	if [ $$fail -ne 0 ]; then echo "self-hosting check FAILED"; exit 1; fi; \
-	echo "selfhost ok: lexer→tokdump, parser→ast, checker→typedump, emitter→emit, brickc→emit, every example (and tokdump on selfhost/*.brick)"
+	echo "selfhost ok: lexer→tokdump, parser→ast, checker→typedump, emitter→emit, brickc→emit, every example and every selfhost source"
 
 # End-to-end self-hosting: use the single Brick-written compiler (brickc) as the
 # compiler -- source .brick in, C out to a file -- then compile that C with the

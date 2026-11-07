@@ -672,6 +672,19 @@ func (in *interp) evalCall(ex *ast.CallExpr, env *Env) (Value, error) {
 		switch id.Name {
 		case "print":
 			return nil, in.print(in.out, ex.Args[0], env)
+		case "print_bytes":
+			v, err := in.eval(ex.Args[0], env)
+			if err != nil {
+				return nil, err
+			}
+			b, ok := read(v).(*Bytes)
+			if !ok {
+				return nil, &RuntimeError{Msg: "print_bytes expects bytes", Line: ex.Line, Col: ex.Col}
+			}
+			if _, err := in.out.Write(b.Data); err != nil {
+				return nil, &RuntimeError{Msg: err.Error(), Line: ex.Line, Col: ex.Col}
+			}
+			return nil, nil
 		case "eprint":
 			return nil, in.print(in.errw, ex.Args[0], env)
 		case "read_file":

@@ -209,6 +209,8 @@ function main() {
 `to_bytes(text)` copies a string's bytes up to the first NUL; `bytes(List(int))`
 builds one from byte values; `to_text(bytes)` copies it back. Indexing and
 `for b in ...` yield `int` bytes, and `==` / `!=` compare them byte-wise.
+`print_bytes(b)` writes the buffer exactly — NULs included, no newline added —
+which is how the self-hosted dumps emit byte-exact output.
 
 Generates readable C you can read side-by-side with the source (K&R style,
 Clean Code naming, `static` linkage, no hidden state):
@@ -283,10 +285,11 @@ Mapped to the roadmap in the spec (§15):
       whole pipeline as one program — lex, parse, resolve imports, check, emit —
       a single self-hosted compiler; `make selfhost-e2e` uses it to compile each
       example, builds the C with the system C compiler, and checks the result
-      runs like the Go compiler's. The length-carrying `bytes` type makes the
-      lexer byte-exact: token literals are kept as bytes, so `brick tokdump` now
-      matches even on `selfhost/*.brick`, whose sources contain `\0` literals
-      (see `selfhost/README.md`).
+      runs like the Go compiler's. The length-carrying `bytes` type plus
+      `print_bytes` made the whole front end byte-exact: token literals, AST
+      string nodes and the dumps carry exact bytes, so every stage matches the
+      Go compiler on `selfhost/*.brick` too, whose sources contain `\0`
+      literals (see `selfhost/README.md`).
 
 ### Semantics enforced by the checker
 
@@ -356,7 +359,8 @@ Brick-written compiler would need.
   and `bytes` — assemble output without quadratic `+`
 - `bytes` — a length-carrying byte string that can hold NUL and any byte
   0..255, built with `bytes(List(int))` or `to_bytes(text)`, read back with
-  `to_text`, `.len`, `b[i]`, `for b in ...` and `==` / `!=`
+  `to_text`, `.len`, `b[i]`, `for b in ...` and `==` / `!=`, and written
+  exactly with `print_bytes`
 - top-level `const` — computed at compile time and inlined
 - `arena { ... }` for bulk allocation
 - `slice(text, start, end) -> text` — extract a byte range of a string
@@ -405,7 +409,8 @@ away:
 | `v0.3.14` | self-hosted C emitter; shared `frontend.brick` |
 | `v0.3.15` | single self-hosted compiler (`brickc.brick`); shared `codegen.brick` |
 | `v0.3.16` | `bytes`: length-carrying byte strings |
-| `v0.3.17` | byte-exact self-hosted lexer: token literals as `bytes` (current) |
+| `v0.3.17` | byte-exact self-hosted lexer: token literals as `bytes` |
+| `v0.3.18` | `print_bytes`; byte-exact AST dump and emitter on `\0` literals (current) |
 
 ```sh
 git tag                     # list the tags

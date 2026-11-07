@@ -207,44 +207,44 @@ function readString(l: &mut Lexer, line: int, col: int) -> Token {
     var buf = ""
     var codes = List(int)
     while l.ch != '"' && l.ch != 0 {
-        if l.ch == '\\' {
-            readChar(l)
-            if l.ch == 'n' {
-                buf = buf + "\n"
-                codes.push(10)
-            } else if l.ch == 't' {
-                buf = buf + "\t"
-                codes.push(9)
-            } else if l.ch == 'r' {
-                buf = buf + "\r"
-                codes.push(13)
-            } else if l.ch == '\\' {
-                buf = buf + "\\"
-                codes.push(92)
-            } else if l.ch == '"' {
-                buf = buf + "\""
-                codes.push(34)
-            } else if l.ch == '0' {
-                // A zero byte: text would drop it, so keep it in codes.
-                buf = buf + "\0"
-                codes.push(0)
-            } else {
-                buf = buf + "\\" + slice(l.src, l.pos, l.pos + 1)
-                codes.push(92)
-                codes.push(l.ch)
-            }
-            readChar(l)
-        } else {
-            buf = buf + slice(l.src, l.pos, l.pos + 1)
-            codes.push(l.ch)
-            readChar(l)
-        }
+    if l.ch == '\\' {
+        readChar(l)
+        if l.ch == 'n' {
+            buf = buf + "\n"
+            codes.push(10)
+        } else if l.ch == 't' {
+            buf = buf + "\t"
+            codes.push(9)
+        } else if l.ch == 'r' {
+            buf = buf + "\r"
+            codes.push(13)
+        } else if l.ch == '\\' {
+            buf = buf + "\\"
+            codes.push(92)
+        } else if l.ch == '"' {
+        buf = buf + "\""
+        codes.push(34)
+    } else if l.ch == '0' {
+        // A zero byte: text would drop it, so keep it in codes.
+        buf = buf + "\0"
+        codes.push(0)
+    } else {
+        buf = buf + "\\" + slice(l.src, l.pos, l.pos + 1)
+        codes.push(92)
+        codes.push(l.ch)
     }
-    if l.ch != '"' {
-        return tok("ILLEGAL", "unterminated string", line, col)
-    }
-    readChar(l) // consume the closing quote
-    return tokRaw("STRING", buf, bytes(codes), line, col)
+    readChar(l)
+} else {
+    buf = buf + slice(l.src, l.pos, l.pos + 1)
+    codes.push(l.ch)
+    readChar(l)
+}
+}
+if l.ch != '"' {
+return tok("ILLEGAL", "unterminated string", line, col)
+}
+readChar(l) // consume the closing quote
+return tokRaw("STRING", buf, bytes(codes), line, col)
 }
 
 function readCharLiteral(l: &mut Lexer, line: int, col: int) -> Token {
@@ -272,26 +272,26 @@ function readCharLiteral(l: &mut Lexer, line: int, col: int) -> Token {
             b = "'"
             code = 39
         } else if l.ch == '"' {
-            b = "\""
-            code = 34
-        } else if l.ch == '0' {
-            // A zero byte: text would drop it, so keep code = 0.
-            b = "\0"
-            code = 0
-        } else {
-            return tok("ILLEGAL", "unknown escape in character literal", line, col)
-        }
-        readChar(l)
+        b = "\""
+        code = 34
+    } else if l.ch == '0' {
+        // A zero byte: text would drop it, so keep code = 0.
+        b = "\0"
+        code = 0
     } else {
-        b = slice(l.src, l.pos, l.pos + 1)
-        code = l.ch
-        readChar(l)
+        return tok("ILLEGAL", "unknown escape in character literal", line, col)
     }
-    if l.ch != '\'' {
-        return tok("ILLEGAL", "character literal must hold exactly one byte", line, col)
-    }
-    readChar(l) // consume the closing quote
-    return tokRaw("CHAR", b, byteString(code), line, col)
+    readChar(l)
+} else {
+    b = slice(l.src, l.pos, l.pos + 1)
+    code = l.ch
+    readChar(l)
+}
+if l.ch != '\'' {
+    return tok("ILLEGAL", "character literal must hold exactly one byte", line, col)
+}
+readChar(l) // consume the closing quote
+return tokRaw("CHAR", b, byteString(code), line, col)
 }
 
 // ---------- the scanner ----------
@@ -313,10 +313,10 @@ function nextToken(l: &mut Lexer) -> Token {
         return tok(")", ")", line, col)
     }
     if l.ch == '{' {
-        readChar(l)
-        return tok("{", "{", line, col)
-    }
-    if l.ch == '}' {
+            readChar(l)
+            return tok("{", "{", line, col)
+        }
+        if l.ch == '}' {
         readChar(l)
         return tok("}", "}", line, col)
     }
@@ -437,13 +437,13 @@ function nextToken(l: &mut Lexer) -> Token {
         return readNumber(l, line, col)
     }
     if l.ch == '"' {
-        return readString(l, line, col)
-    }
-    if l.ch == '\'' {
-        return readCharLiteral(l, line, col)
-    }
+    return readString(l, line, col)
+}
+if l.ch == '\'' {
+    return readCharLiteral(l, line, col)
+}
 
-    var p = l.pos
-    readChar(l)
-    return tok("ILLEGAL", slice(l.src, p, p + 1), line, col)
+var p = l.pos
+readChar(l)
+return tok("ILLEGAL", slice(l.src, p, p + 1), line, col)
 }

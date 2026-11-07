@@ -536,7 +536,7 @@ function expr(em: &mut Emitter, idx: int) -> text {
         return n.s
     }
     if n.kind == "String" {
-        return cQuote(n.s)
+        return cQuote(n.rb)
     }
     if n.kind == "Bool" {
         if n.flag == 1 {
@@ -600,6 +600,9 @@ function emitCall(em: &mut Emitter, n: Node) -> text {
         var nm = callee.name
         if nm == "print" {
             return printCall(em, "stdout", n.args[0])
+        }
+        if nm == "print_bytes" {
+            return "brick_print_bytes(" + expr(em, n.args[0]) + ")"
         }
         if nm == "eprint" {
             return printCall(em, "stderr", n.args[0])
@@ -1007,31 +1010,41 @@ function programUsesBytes(em: &Emitter) -> bool {
     return false
 }
 
-function cQuote(s: text) -> text {
+// byteText turns one byte value into a one-byte text value.
+function byteText(c: int) -> text {
+    var one = List(int)
+    one.push(c)
+    return to_text(bytes(one))
+}
+
+// cQuote writes a C string literal for a literal's exact bytes. Control bytes
+// -- including NUL -- get a fixed-width octal escape, so a literal like "\0"
+// survives code generation and stays warning-clean under -Wall -Wextra.
+function cQuote(s: bytes) -> text {
     var b = Builder()
     b.add("\"")
     var i = 0
     while i < s.len {
         var c = s[i]
-        if c == '\n' {
+        if c == 10 {
             b.add("\\n")
-        } else if c == '\t' {
+        } else if c == 9 {
             b.add("\\t")
-        } else if c == '\r' {
+        } else if c == 13 {
             b.add("\\r")
-        } else if c == '\\' {
+        } else if c == 92 {
             b.add("\\\\")
-        } else if c == '"' {
-        b.add("\\\"")
-    } else if c < 32 || c == 127 {
-        b.add(octal3(c))
-    } else {
-        b.add(slice(s, i, i + 1))
+        } else if c == 34 {
+            b.add("\\\"")
+        } else if c < 32 || c == 127 {
+            b.add(octal3(c))
+        } else {
+            b.add(byteText(c))
+        }
+        i = i + 1
     }
-    i = i + 1
-}
-b.add("\"")
-return b.build()
+    b.add("\"")
+    return b.build()
 }
 
 function octal3(c: int) -> text {

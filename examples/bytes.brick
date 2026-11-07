@@ -33,4 +33,8 @@ function main() {
     print(brick != same)     // false
 
     print(bytes(List(int)).len)  // 0
+
+    // print_bytes writes exact bytes and adds no newline.
+    print_bytes(to_bytes("raw:"))
+    print(7)      // raw:7
 }

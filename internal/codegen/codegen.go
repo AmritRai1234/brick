@@ -158,6 +158,11 @@ static inline int brick_bytes_eq(BrickBytes a, BrickBytes b)
     return a.len == 0 || memcmp(a.data, b.data, (size_t)a.len) == 0;
 }
 
+static inline void brick_print_bytes(BrickBytes bytes)
+{
+    fwrite(bytes.data, 1, (size_t)bytes.len, stdout);
+}
+
 static inline const char *brick_bytes_to_text(BrickBytes bytes)
 {
     char *text = brick_alloc((size_t)bytes.len + 1);
@@ -1077,6 +1082,8 @@ func (g *Generator) expr(e ast.Expr) string {
 			switch id.Name {
 			case "print":
 				return g.printCall("stdout", ex.Args[0])
+			case "print_bytes":
+				return fmt.Sprintf("brick_print_bytes(%s)", g.expr(ex.Args[0]))
 			case "eprint":
 				return g.printCall("stderr", ex.Args[0])
 			case "read_file":
