@@ -18,35 +18,40 @@ identical work:
 ## Running it
 
 ```sh
-make            # or: go build -o bin/brick ./cmd/brick
-python3 bench/run.py
+make bench       # or: go build -o bin/brick ./cmd/brick && python3 bench/run.py
 ```
 
 `run.py` builds all four with optimisation on (`-O2` for C/C++, `-O` for Rust,
 Brick's default `-O2` C backend), verifies the checksums agree, then reports the
-best of 7 wall-clock runs per workload. Set `RUNS=n` to change the sample count.
+best of 12 interleaved rounds. `RUNS=n` changes the round count; `PIN=<core>`
+changes the core they are pinned to, and `PIN=` turns pinning off.
 
 ## Results
 
-Best of 7 runs, seconds (lower is better); ratios are relative to the fastest
-language in that row:
+Best of 12 interleaved rounds, seconds (lower is better); ratios are relative
+to the fastest language in that row:
 
 | workload | brick | c | c++ | rust |
 | --- | --- | --- | --- | --- |
-| int | 0.569 **(x1.00)** | 0.568 (x1.00) | 0.779 (x1.37) | 1.126 (x1.98) |
-| sieve | 0.719 **(x1.00)** | 0.790 (x1.10) | 0.936 (x1.30) | 0.815 (x1.13) |
-| text | 0.156 (x5.37) | 0.089 (x3.08) | 0.038 (x1.30) | 0.029 **(x1.00)** |
+| int | 0.595 (x1.03) | 0.576 **(x1.00)** | 0.575 **(x1.00)** | 1.092 (x1.90) |
+| sieve | 0.824 (x1.05) | 0.981 (x1.25) | 0.787 **(x1.00)** | 0.786 **(x1.00)** |
+| text | 0.078 (x3.85) | 0.042 (x2.08) | 0.021 (x1.02) | 0.020 **(x1.00)** |
 
-Readings:
+What it shows:
 
-- **`int`** — Brick and C tie at the top. Brick's C backend lowers the loop to
-  plain `int64_t` arithmetic, so there is nothing to lose; Rust is slowest here
-  because this benchmark uses release-mode overflow checks that Brick and C do
-  not pay for.
-- **`sieve`** — Brick is fastest. `List(bool)` element access goes through the
-  generic `brick_list_at`, but the inner marking loop is memory-bound, so the
-  extra indirection disappears into cache-miss latency.
-- **`text`** — the real gap: Brick is ~5x slower than Rust. Each iteration does
+- **`int`** — Brick is within 3% of C and C++: its C backend lowers the loop to
+  plain `int64_t` arithmetic and the C compiler optimises it exactly as it
+  optimises the hand-written C. Rust is 1.9x slower here even though the source
+  is identical arithmetic. The difference is in the emitted code: GCC proves the
+  intermediate value of `(x * 31 + i)` non-negative and emits a bare
+  `mulq`/`shrq $29`, while LLVM adds a signed-remainder correction
+  (`shr $63` / `sar $29` / `add`) on every iteration, and the loop is
+  dependency-bound, so the longer chain costs ~2x.
+- **`sieve`** — everyone lands within 25%, and Brick beats plain C. The marking
+  loop is memory-bound, so Brick's `brick_list_at` call per element access
+  disappears into cache-miss latency.
+- **`text`** — the real gap: Brick is ~4x slower than C++ and Rust, ~2x slower
+  than C. Each iteration is
   `brick_builder_add(&b, brick_int_to_text(i))`:
 
   ```c
@@ -61,17 +66,26 @@ Readings:
   {
       size_t need = builder->len + strlen(text) + 1;
       /* ...grow... */
-      memcpy(builder->data + builder->len, text, strlen(text));  /* second strlen */
-      builder->len += strlen(text);                              /* third strlen */
+      memcpy(builder->data + builder->len, text, strlen(text));  /* 2nd strlen */
+      builder->len += strlen(text);                              /* 3rd strlen */
       ...
   }
   ```
 
-  So every appended integer costs an arena allocation plus a `snprintf`, and
-  every append walks the text three times. C's version formats straight into a
-  stack buffer and `memcpy`s once; Rust and C++ reuse a growable `String`.
+  So every appended integer costs an arena allocation plus an `snprintf`, and
+  every append walks the text three times. C formats straight into a stack
+  buffer and `memcpy`s once; Rust and C++ reuse a growable `String` that never
+  re-walks what it already holds.
 
 This is a known, fixable runtime cost rather than a codegen limitation: an
-integer fast path in `brick_builder_add`, or a small non-allocating
-`brick_int_to_text` (write into a stack buffer, return length), would remove
-both the allocation and the repeated `strlen`.
+integer fast path in `brick_builder_add` (write into a stack buffer, return the
+length), or a non-allocating `brick_int_to_text`, would remove both the
+allocation and the repeated `strlen`.
+
+## A note on measurement
+
+This machine is shared and noisy — a browser can steal a core mid-run and
+inflate one language by 2-3x. Two things keep the numbers meaningful: every run
+is pinned to one core (`taskset`), and each round runs all four programs back to
+back per workload, so they all see the same conditions; the table reports the
+best round. Absolute times still drift with system load; the ratios are stable.

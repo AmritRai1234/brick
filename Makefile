@@ -1,4 +1,4 @@
-.PHONY: build test fmt fmt-check vet clean examples native diff interp selfhost selfhost-e2e bootstrap backup
+.PHONY: build test fmt fmt-check vet clean examples native diff interp selfhost selfhost-e2e bootstrap backup bench
 
 build:
 	go build -o bin/brick ./cmd/brick
@@ -169,6 +169,11 @@ bootstrap: build
 		echo "bootstrap: self-built compiler emits different C"; exit 1; \
 	fi; \
 	echo "bootstrap ok: Go-built compiler → self-built compiler → itself (identical C), and the self-built compiler builds and links working programs"
+
+# Same three workloads in Brick, C, C++ and Rust, timed head-to-head.
+# RUNS=n changes the sample count; PIN=<core> changes the core they are pinned to.
+bench: build
+	python3 bench/run.py
 
 # Write a single-file backup of the whole repo (all branches and tags) to
 # ../brick-backups. Restore with:  git clone <file>.bundle brick

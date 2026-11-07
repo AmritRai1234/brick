@@ -2,9 +2,14 @@
 """Build the four bench programs and time them.
 
 Every program does the same three workloads with the same sizes and prints the
-same checksum, so the numbers are comparable. Each binary is run several times
-per workload; the best (minimum) wall time is reported, which is the least
-noisy summary for a short CPU-bound run.
+same checksum, so the numbers are comparable.
+
+Timing method: RUNS rounds, and inside each round all four programs run once per
+workload, back to back. Interleaving keeps every language under the same machine
+conditions (a busy background process otherwise inflates one language and not
+the next), and the best (minimum) wall time over the rounds is reported, which
+is the least noisy summary for a short CPU-bound run. Runs are pinned to one
+core with taskset when it is available.
 """
 
 import os
@@ -22,6 +27,13 @@ CXX = os.environ.get("CXX", "c++")
 RUSTC = os.environ.get("RUSTC", "rustc")
 
 RUNS = int(os.environ.get("RUNS", "7"))
+
+# Pin every run to one core. This machine's timings swing by 2x between runs
+# when a process is free to migrate or share a core with something else; with
+# taskset the numbers are repeatable to within a few percent. PIN="" disables it.
+PIN = os.environ.get("PIN", "3")
+TASKSET = shutil.which("taskset")
+PIN_ARGS = ["taskset", "-c", PIN] if (TASKSET and PIN) else []
 MODES = ["int", "sieve", "text"]
 
 
@@ -48,18 +60,21 @@ def build():
 def checksums(progs):
     out = {}
     for name, path in progs.items():
-        out[name] = {mode: run([path, mode], capture_output=True, text=True).stdout.strip()
+        out[name] = {mode: run(PIN_ARGS + [path, mode], capture_output=True, text=True).stdout.strip()
                      for mode in MODES}
     return out
 
 
-def time_one(path, mode):
-    best = None
+def time_all(progs, mode):
+    """One timed run of every program per round, interleaved; keep the best."""
+    best = {name: None for name in progs}
     for _ in range(RUNS):
-        start = time.perf_counter()
-        subprocess.run([path, mode], stdout=subprocess.DEVNULL, check=True)
-        elapsed = time.perf_counter() - start
-        best = elapsed if best is None else min(best, elapsed)
+        for name, path in progs.items():
+            start = time.perf_counter()
+            subprocess.run(PIN_ARGS + [path, mode], stdout=subprocess.DEVNULL, check=True)
+            elapsed = time.perf_counter() - start
+            if best[name] is None or elapsed < best[name]:
+                best[name] = elapsed
     return best
 
 
@@ -82,7 +97,7 @@ def main():
     print(header)
     print("-" * len(header))
     for mode in MODES:
-        times = {n: time_one(progs[n], mode) for n in names}
+        times = time_all(progs, mode)
         fastest = min(times.values())
         row = f"{mode:8}" + "".join(f"{times[n]:10.3f}" for n in names)
         print(row)
