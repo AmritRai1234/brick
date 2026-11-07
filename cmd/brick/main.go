@@ -38,7 +38,7 @@ import (
 	"brick/internal/parser"
 )
 
-const version = "0.3.8"
+const version = "0.3.9"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -420,11 +420,11 @@ func writeFile(path, content string) {
 }
 
 // linkBinary produces an executable at out from either C or assembly source.
-// Any C files sitting next to the .brick source (sourceFile) are compiled and
-// linked too, which is how a program calls into C via `extern` (see
-// examples/extern.brick alongside examples/extern.c).
+// The C sources a program declares with `extern` are compiled and linked too,
+// resolved by companionCFiles (see examples/extern.brick alongside
+// examples/extern.c).
 func linkBinary(kind, src, out, sourceFile string) {
-	extra := siblingCFiles(sourceFile)
+	extra := companionCFiles(sourceFile)
 	switch kind {
 	case "c":
 		cfile := tempPath("brick-*.c")
@@ -449,15 +449,26 @@ func linkBinary(kind, src, out, sourceFile string) {
 	}
 }
 
-// siblingCFiles returns the .c files in the same directory as the Brick source,
-// so `extern` functions they define resolve at link time.
-func siblingCFiles(sourceFile string) []string {
-	dir := filepath.Dir(sourceFile)
-	matches, err := filepath.Glob(filepath.Join(dir, "*.c"))
-	if err != nil {
-		return nil
+// companionCFiles returns the C sources to link with a Brick program so the
+// functions it declares with `extern` resolve. Resolution is deterministic and
+// never reaches outside the program's own files:
+//
+//   - foo.brick  ->  foo.c            (the C file named after the program)
+//   - foo.brick  ->  foo.d/*.c        (a directory of companion files)
+//
+// Both are optional. Naming the C file after the program keeps builds
+// reproducible: a stray .c elsewhere in the same directory is never linked.
+func companionCFiles(sourceFile string) []string {
+	stem := strings.TrimSuffix(sourceFile, ".brick")
+	var files []string
+	if info, err := os.Stat(stem + ".c"); err == nil && !info.IsDir() {
+		files = append(files, stem+".c")
 	}
-	return matches
+	// filepath.Glob returns matches in lexical order.
+	if matches, err := filepath.Glob(filepath.Join(stem+".d", "*.c")); err == nil {
+		files = append(files, matches...)
+	}
+	return files
 }
 
 func execBinary(bin string, args []string) {

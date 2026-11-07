@@ -354,7 +354,8 @@ away:
 | `v0.3.5` | top-level `const` |
 | `v0.3.6` | `for x in xs { ... }` |
 | `v0.3.7` | character literals (`'a'`) |
-| `v0.3.8` | `to_text` for `float` and `bool` (current) |
+| `v0.3.8` | `to_text` for `float` and `bool` |
+| `v0.3.9` | predictable C linking (`foo.c`, `foo.d/*.c`) (current) |
 
 ```sh
 git tag                     # list the tags
@@ -397,6 +398,15 @@ canonically formatted. The one roadmap item left (spec §15) is self-hosting:
 growing Brick until the compiler can be rewritten in Brick itself. See
 `docs/SPEC.md` for the full plan.
 
-Calling into C now works end to end: the compiler links any `.c` files that sit
-next to the `.brick` source, so `examples/extern.brick` (which calls `triple`
-from `examples/extern.c`) builds and runs with `brick run`.
+Calling into C works end to end: when a program declares `extern` functions,
+the compiler links the C sources named after the program, never a blanket glob:
+
+| Program | Links |
+| --- | --- |
+| `foo.brick` | `foo.c` (if present) |
+| `foo.brick` | `foo.d/*.c` (if the directory exists) |
+
+So `examples/extern.brick` calls `triple` from `examples/extern.c` and builds
+with `brick run`, and a program can split its C across `foo.d/`. Naming the C
+file after the program keeps builds reproducible — an unrelated `.c` in the same
+directory is never picked up.
