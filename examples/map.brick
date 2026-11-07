@@ -1,0 +1,26 @@
+// Maps: a symbol table / word counter keyed by text (§13).
+function main() {
+    var words = List(text)
+    words.push("the")
+    words.push("quick")
+    words.push("the")
+    words.push("fox")
+    words.push("the")
+
+    var counts = Map(text, int)
+    var i = 0
+    while i < words.len {
+        var w = words[i]
+        if counts.has(w) {
+            counts.set(w, counts.get(w) + 1)
+        } else {
+            counts.set(w, 1)
+        }
+        i = i + 1
+    }
+
+    print(counts.len)          // 3
+    print(counts.get("the"))   // 3
+    print(counts.get("fox"))   // 1
+    print(counts.has("cat"))   // false
+}

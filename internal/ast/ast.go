@@ -26,15 +26,19 @@ type Expr interface {
 
 // Type is a resolved Brick type.
 type Type struct {
-	Name string // "int", "float", "bool", "text", "List", "void", or a struct/enum name
+	Name string // "int", "float", "bool", "text", "List", "Map", "void", or a struct/enum name
 	Ptr  bool   // true for a borrow/reference type
-	Elem *Type  // element type for List
+	Elem *Type  // element type for List; value type for Map
+	Key  *Type  // key type for Map
 }
 
 func (t Type) String() string {
 	base := t.Name
-	if t.Name == "List" && t.Elem != nil {
+	switch {
+	case t.Name == "List" && t.Elem != nil:
 		base = "List(" + t.Elem.String() + ")"
+	case t.Name == "Map" && t.Key != nil && t.Elem != nil:
+		base = "Map(" + t.Key.String() + ", " + t.Elem.String() + ")"
 	}
 	if t.Ptr {
 		return "&" + base
@@ -55,8 +59,14 @@ func (t Type) Equals(o Type) bool {
 	if (t.Elem == nil) != (o.Elem == nil) {
 		return false
 	}
-	if t.Elem != nil {
-		return t.Elem.Equals(*o.Elem)
+	if t.Elem != nil && !t.Elem.Equals(*o.Elem) {
+		return false
+	}
+	if (t.Key == nil) != (o.Key == nil) {
+		return false
+	}
+	if t.Key != nil && !t.Key.Equals(*o.Key) {
+		return false
 	}
 	return true
 }

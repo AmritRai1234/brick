@@ -228,3 +228,26 @@ func TestNoLabelsWithoutJumps(t *testing.T) {
 		t.Errorf("no jump should emit no labels\n%s", out)
 	}
 }
+
+func TestMapCodegen(t *testing.T) {
+	out := gen(t, `
+	function main() {
+		var m = Map(text, int)
+		m.set("a", 1)
+		print(m.get("a"))
+		print(m.has("a"))
+		print(m.len)
+	}`)
+	for _, want := range []string{
+		"static inline BrickMap brick_map_new(int64_t elem)",
+		"brick_map_new(sizeof(int64_t))",
+		"BRICK_MAP_SET(int64_t, (m), (\"a\"), (1))",
+		"brick_map_get_must(&(m), \"a\")",
+		"brick_map_has(&(m), \"a\")",
+		"((m).len)",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q", want)
+		}
+	}
+}

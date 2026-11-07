@@ -263,3 +263,30 @@ func TestBreakInLoopOK(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestMapTypes(t *testing.T) {
+	src := `
+	function main() {
+		var m = Map(text, int)
+		m.set("a", 1)
+		print(m.len)
+		print(m.get("a"))
+		print(m.has("a"))
+	}`
+	if _, err := check(t, src); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestMapValueTypeChecked(t *testing.T) {
+	src := `function main() { var m = Map(text, int) m.set("a", "oops") }`
+	if _, err := check(t, src); err == nil {
+		t.Fatal("want an error for a value of the wrong type")
+	}
+}
+
+func TestMapKeyMustBeText(t *testing.T) {
+	if _, err := check(t, `function main() { var m = Map(int, int) }`); err == nil {
+		t.Fatal("want an error for non-text map keys")
+	}
+}

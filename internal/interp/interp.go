@@ -7,6 +7,7 @@
 package interp
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -34,6 +35,13 @@ type Value interface{}
 type List struct {
 	Elem  ast.Type
 	Items []Value
+}
+
+// Map is a map value with text keys.
+type Map struct {
+	Key  ast.Type
+	Elem ast.Type
+	Data map[string]Value
 }
 
 // Struct is an instance of a struct type. Fields are slots so a field can be
@@ -524,6 +532,10 @@ func (in *interp) evalField(ex *ast.FieldExpr, env *Env) (Value, error) {
 		if ex.Field == "len" {
 			return int64(len(v.Items)), nil
 		}
+	case *Map:
+		if ex.Field == "len" {
+			return int64(len(v.Data)), nil
+		}
 	}
 	return nil, &RuntimeError{Msg: "no field " + ex.Field, Line: ex.Line, Col: ex.Col}
 }
@@ -606,6 +618,8 @@ func (in *interp) evalCall(ex *ast.CallExpr, env *Env) (Value, error) {
 			return &List{Elem: ast.Type{Name: "text"}, Items: items}, nil
 		case "List":
 			return &List{}, nil
+		case "Map":
+			return &Map{Data: map[string]Value{}}, nil
 		}
 	}
 
@@ -624,7 +638,7 @@ func (in *interp) evalCall(ex *ast.CallExpr, env *Env) (Value, error) {
 				return &Enum{Type: id.Name, Variant: fe.Field, Fields: fields}, nil
 			}
 		}
-		// Method call: xs.push(v).
+		// Method call: xs.push(v), or m.set/get/has(k).
 		if id, ok := fe.Base.(*ast.Ident); ok {
 			if slot, found := env.lookup(id.Name); found {
 				if l, ok := read(*slot).(*List); ok && fe.Field == "push" {
@@ -634,6 +648,11 @@ func (in *interp) evalCall(ex *ast.CallExpr, env *Env) (Value, error) {
 					}
 					l.Items = append(l.Items, deepCopy(read(v)))
 					return nil, nil
+				}
+				if m, ok := read(*slot).(*Map); ok {
+					if mv, err := in.mapMethod(m, fe.Field, ex, env); err != errNotMapMethod {
+						return mv, err
+					}
 				}
 			}
 		}
@@ -662,6 +681,44 @@ func (in *interp) evalCall(ex *ast.CallExpr, env *Env) (Value, error) {
 		}
 	}
 	return in.callFunc(fd, argv)
+}
+
+// errNotMapMethod signals that a field name is not a map method, so the caller
+// can fall through to other call handling.
+var errNotMapMethod = errors.New("not a map method")
+
+func (in *interp) mapMethod(m *Map, field string, ex *ast.CallExpr, env *Env) (Value, error) {
+	switch field {
+	case "set":
+		k, err := in.textArg(ex.Args[0], env)
+		if err != nil {
+			return nil, err
+		}
+		v, err := in.eval(ex.Args[1], env)
+		if err != nil {
+			return nil, err
+		}
+		m.Data[k] = deepCopy(read(v))
+		return nil, nil
+	case "get":
+		k, err := in.textArg(ex.Args[0], env)
+		if err != nil {
+			return nil, err
+		}
+		v, ok := m.Data[k]
+		if !ok {
+			return nil, &RuntimeError{Msg: "missing map key: " + k, Line: ex.Line, Col: ex.Col}
+		}
+		return v, nil
+	case "has":
+		k, err := in.textArg(ex.Args[0], env)
+		if err != nil {
+			return nil, err
+		}
+		_, ok := m.Data[k]
+		return ok, nil
+	}
+	return nil, errNotMapMethod
 }
 
 func (in *interp) textArg(e ast.Expr, env *Env) (string, error) {
@@ -757,6 +814,12 @@ func deepCopy(v Value) Value {
 			fields[i] = deepCopy(fv)
 		}
 		return &Enum{Type: x.Type, Variant: x.Variant, Fields: fields}
+	case *Map:
+		data := make(map[string]Value, len(x.Data))
+		for k, v := range x.Data {
+			data[k] = deepCopy(v)
+		}
+		return &Map{Key: x.Key, Elem: x.Elem, Data: data}
 	}
 	return v
 }
@@ -773,6 +836,8 @@ func zeroValue(t ast.Type) Value {
 		return ""
 	case "List":
 		return &List{Elem: derefElem(t)}
+	case "Map":
+		return &Map{Data: map[string]Value{}}
 	}
 	return zeroAny()
 }

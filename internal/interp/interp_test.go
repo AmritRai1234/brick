@@ -179,3 +179,25 @@ func TestBreakContinue(t *testing.T) {
 	}`
 	mustRun(t, src, "15\n1\n3\n5\n7\n9")
 }
+
+func TestMap(t *testing.T) {
+	src := `
+	function main() {
+		var m = Map(text, int)
+		m.set("a", 1)
+		m.set("b", 2)
+		m.set("a", 10)     // overwrite
+		print(m.len)       // 2
+		print(m.get("a"))  // 10
+		print(m.get("b"))  // 2
+		print(m.has("c"))  // false
+	}`
+	mustRun(t, src, "2\n10\n2\nfalse")
+}
+
+func TestMapMissingKey(t *testing.T) {
+	src := `function main() { var m = Map(text, int) print(m.get("x")) }`
+	if _, err := runInterp(t, src); err == nil {
+		t.Fatal("want a runtime error for a missing key")
+	}
+}

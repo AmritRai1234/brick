@@ -482,6 +482,16 @@ func (c *Checker) inferCall(ex *ast.CallExpr) ast.Type {
 		}
 		return voidT
 	}
+	// map methods: m.set(k, v), m.get(k), m.has(k)
+	if fe, ok := ex.Callee.(*ast.FieldExpr); ok {
+		switch fe.Field {
+		case "set", "get", "has":
+			bt := c.infer(fe.Base)
+			if bt.Name == "Map" && bt.Key != nil && bt.Elem != nil {
+				return c.inferMapMethod(ex, fe, bt)
+			}
+		}
+	}
 	// enum variant constructor: Enum.Variant(args...)
 	if fe, ok := ex.Callee.(*ast.FieldExpr); ok {
 		if bid, ok := fe.Base.(*ast.Ident); ok {
@@ -569,6 +579,26 @@ func (c *Checker) inferCall(ex *ast.CallExpr) ast.Type {
 		et := c.resolve(ex, ast.Type{Name: argIdent.Name})
 		return ast.Type{Name: "List", Elem: &et}
 	}
+	// Map(K, V): an empty map. Keys must be text for now.
+	if id.Name == "Map" {
+		if len(ex.Args) != 2 {
+			c.errorf(ex, "Map(...) takes a key type and a value type, e.g. Map(text, int)")
+		}
+		keyIdent, ok := ex.Args[0].(*ast.Ident)
+		if !ok {
+			c.errorf(ex, "Map(...) key must be a type name, e.g. Map(text, int)")
+		}
+		valIdent, ok := ex.Args[1].(*ast.Ident)
+		if !ok {
+			c.errorf(ex, "Map(...) value must be a type name, e.g. Map(text, int)")
+		}
+		kt := c.resolve(ex, ast.Type{Name: keyIdent.Name})
+		if !kt.Equals(textT) {
+			c.errorf(ex, "Map keys must be text for now, got %s", kt)
+		}
+		vt := c.resolve(ex, ast.Type{Name: valIdent.Name})
+		return ast.Type{Name: "Map", Key: &kt, Elem: &vt}
+	}
 	fn, ok := c.Funcs[id.Name]
 	if !ok {
 		c.errorf(ex, "undefined function %q", id.Name)
@@ -583,6 +613,39 @@ func (c *Checker) inferCall(ex *ast.CallExpr) ast.Type {
 		}
 	}
 	return fn.Ret
+}
+
+// inferMapMethod checks a call like m.set(k, v), m.get(k) or m.has(k).
+func (c *Checker) inferMapMethod(ex *ast.CallExpr, fe *ast.FieldExpr, bt ast.Type) ast.Type {
+	checkKey := func(a ast.Expr) {
+		if kt := c.infer(a); !kt.Equals(*bt.Key) {
+			c.errorf(ex, "map key must be %s, got %s", *bt.Key, kt)
+		}
+	}
+	switch fe.Field {
+	case "set":
+		if len(ex.Args) != 2 {
+			c.errorf(ex, "set takes 2 arguments (key, value), got %d", len(ex.Args))
+		}
+		checkKey(ex.Args[0])
+		if vt := c.infer(ex.Args[1]); !vt.Equals(*bt.Elem) {
+			c.errorf(ex, "map value must be %s, got %s", *bt.Elem, vt)
+		}
+		return voidT
+	case "get":
+		if len(ex.Args) != 1 {
+			c.errorf(ex, "get takes 1 argument (key), got %d", len(ex.Args))
+		}
+		checkKey(ex.Args[0])
+		return *bt.Elem
+	case "has":
+		if len(ex.Args) != 1 {
+			c.errorf(ex, "has takes 1 argument (key), got %d", len(ex.Args))
+		}
+		checkKey(ex.Args[0])
+		return boolT
+	}
+	return voidT
 }
 
 func (c *Checker) inferField(ex *ast.FieldExpr) ast.Type {
@@ -603,7 +666,7 @@ func (c *Checker) inferField(ex *ast.FieldExpr) ast.Type {
 	}
 	bt := c.infer(ex.Base)
 	if ex.Field == "len" {
-		if bt.Name == "List" || bt.Name == "text" {
+		if bt.Name == "List" || bt.Name == "text" || bt.Name == "Map" {
 			return intT
 		}
 	}

@@ -332,6 +332,139 @@ static inline void brick_write_file(const char *path, const char *contents)
         T brick_push_value = (value);                    \
         brick_list_push(&(list), &brick_push_value);     \
     } while (0)
+
+/*
+ * Maps (Map(text, V)): a hash table with text keys and inline values, used for
+ * symbol tables and the like. Keys are copied; values are stored by bytes.
+ */
+
+#define BRICK_MAP_INITIAL_CAPACITY 8
+
+typedef struct BrickMapEntry
+{
+    char                  *key;
+    struct BrickMapEntry  *next;
+    /* value bytes follow the header */
+} BrickMapEntry;
+
+typedef struct
+{
+    BrickMapEntry **buckets;
+    int64_t         cap;     /* number of buckets     */
+    int64_t         len;     /* number of entries     */
+    int64_t         elem;    /* value size in bytes   */
+} BrickMap;
+
+static inline uint64_t brick_map_hash(const char *key)
+{
+    uint64_t h = 1469598103934665603ULL;   /* FNV-1a */
+
+    while (*key != '\0') {
+        h ^= (unsigned char)*key++;
+        h *= 1099511628211ULL;
+    }
+    return h;
+}
+
+static inline BrickMap brick_map_new(int64_t elem)
+{
+    BrickMap map;
+
+    map.cap   = BRICK_MAP_INITIAL_CAPACITY;
+    map.len   = 0;
+    map.elem  = elem;
+    map.buckets = brick_alloc((size_t)map.cap * sizeof(BrickMapEntry *));
+    memset(map.buckets, 0, (size_t)map.cap * sizeof(BrickMapEntry *));
+    return map;
+}
+
+static inline BrickMapEntry *brick_map_find(BrickMap *map, const char *key)
+{
+    BrickMapEntry *entry = map->buckets[brick_map_hash(key) % (uint64_t)map->cap];
+
+    while (entry != NULL) {
+        if (strcmp(entry->key, key) == 0) {
+            return entry;
+        }
+        entry = entry->next;
+    }
+    return NULL;
+}
+
+static inline void brick_map_rehash(BrickMap *map)
+{
+    int64_t         newcap = map->cap * 2;
+    BrickMapEntry **buckets;
+    int64_t         i;
+
+    buckets = brick_alloc((size_t)newcap * sizeof(BrickMapEntry *));
+    memset(buckets, 0, (size_t)newcap * sizeof(BrickMapEntry *));
+    for (i = 0; i < map->cap; i++) {
+        BrickMapEntry *entry = map->buckets[i];
+        while (entry != NULL) {
+            BrickMapEntry *next = entry->next;
+            uint64_t       idx  = brick_map_hash(entry->key) % (uint64_t)newcap;
+            entry->next = buckets[idx];
+            buckets[idx] = entry;
+            entry = next;
+        }
+    }
+    map->buckets = buckets;
+    map->cap     = newcap;
+}
+
+static inline void brick_map_set(BrickMap *map, const char *key, const void *value)
+{
+    BrickMapEntry *entry = brick_map_find(map, key);
+    size_t         klen;
+    uint64_t       idx;
+
+    if (entry != NULL) {
+        memcpy((char *)entry + sizeof(BrickMapEntry), value, (size_t)map->elem);
+        return;
+    }
+    if (map->len >= map->cap) {
+        brick_map_rehash(map);
+    }
+    entry = brick_alloc(sizeof(BrickMapEntry) + (size_t)map->elem);
+    klen  = strlen(key);
+    entry->key = brick_alloc(klen + 1);
+    memcpy(entry->key, key, klen + 1);
+    memcpy((char *)entry + sizeof(BrickMapEntry), value, (size_t)map->elem);
+    idx = brick_map_hash(key) % (uint64_t)map->cap;
+    entry->next = map->buckets[idx];
+    map->buckets[idx] = entry;
+    map->len++;
+}
+
+static inline void *brick_map_get(BrickMap *map, const char *key)
+{
+    BrickMapEntry *entry = brick_map_find(map, key);
+
+    return entry != NULL ? (char *)entry + sizeof(BrickMapEntry) : NULL;
+}
+
+static inline void *brick_map_get_must(BrickMap *map, const char *key)
+{
+    void *value = brick_map_get(map, key);
+
+    if (value == NULL) {
+        fprintf(stderr, "brick: missing map key: %s\n", key);
+        exit(1);
+    }
+    return value;
+}
+
+static inline int64_t brick_map_has(BrickMap *map, const char *key)
+{
+    return brick_map_find(map, key) != NULL;
+}
+
+#define BRICK_MAP_SET(T, map, key, value)                \
+    do {                                                 \
+        T brick_map_value = (value);                     \
+        brick_map_set(&(map), (key), &brick_map_value);  \
+    } while (0)
 /* --- end runtime --- */
 
 `)
@@ -360,6 +493,8 @@ func (g *Generator) ctype(t ast.Type) string {
 		return "const char*"
 	case "List":
 		return "BrickList"
+	case "Map":
+		return "BrickMap"
 	case "void":
 		return "void"
 	default:
@@ -758,6 +893,9 @@ func (g *Generator) expr(e ast.Expr) string {
 			case "List":
 				t := g.types[ex]
 				return fmt.Sprintf("brick_list_new(sizeof(%s))", g.ctype(*t.Elem))
+			case "Map":
+				t := g.types[ex]
+				return fmt.Sprintf("brick_map_new(sizeof(%s))", g.ctype(*t.Elem))
 			}
 		}
 		if fe, ok := ex.Callee.(*ast.FieldExpr); ok {
@@ -770,6 +908,22 @@ func (g *Generator) expr(e ast.Expr) string {
 		if fe, ok := ex.Callee.(*ast.FieldExpr); ok && fe.Field == "push" {
 			bt := g.types[fe.Base]
 			return fmt.Sprintf("BRICK_PUSH(%s, (%s), (%s))", g.ctype(*bt.Elem), g.expr(fe.Base), g.expr(ex.Args[0]))
+		}
+		if fe, ok := ex.Callee.(*ast.FieldExpr); ok {
+			bt := g.types[fe.Base]
+			if bt.Name == "Map" && bt.Elem != nil {
+				switch fe.Field {
+				case "set":
+					return fmt.Sprintf("BRICK_MAP_SET(%s, (%s), (%s), (%s))",
+						g.ctype(*bt.Elem), g.expr(fe.Base), g.expr(ex.Args[0]), g.expr(ex.Args[1]))
+				case "get":
+					return fmt.Sprintf("(*(%s*)brick_map_get_must(&(%s), %s))",
+						g.ctype(*bt.Elem), g.expr(fe.Base), g.expr(ex.Args[0]))
+				case "has":
+					return fmt.Sprintf("(brick_map_has(&(%s), %s) != 0)",
+						g.expr(fe.Base), g.expr(ex.Args[0]))
+				}
+			}
 		}
 		args := make([]string, len(ex.Args))
 		for i, a := range ex.Args {
@@ -785,6 +939,9 @@ func (g *Generator) expr(e ast.Expr) string {
 		bt := g.types[ex.Base]
 		if ex.Field == "len" {
 			if bt.Name == "List" {
+				return fmt.Sprintf("((%s).len)", g.expr(ex.Base))
+			}
+			if bt.Name == "Map" {
 				return fmt.Sprintf("((%s).len)", g.expr(ex.Base))
 			}
 			if bt.Name == "text" {

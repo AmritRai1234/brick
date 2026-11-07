@@ -127,6 +127,21 @@ function main() {
 }
 ```
 
+Maps are keyed by `text`, with `set`, `get` (panics on a missing key, like an
+out-of-range list index) and `has`:
+
+```brick
+function main() {
+    var counts = Map(text, int)
+    counts.set("apples", 3)
+    counts.set("pears", 1)
+    counts.set("apples", 5)      // overwrite
+    print(counts.len)            // 2
+    print(counts.get("apples"))  // 5
+    print(counts.has("plums"))   // false
+}
+```
+
 Arenas free a whole region at once, which is often faster than `malloc`/`free`
 per object:
 
@@ -259,7 +274,7 @@ Brick-written compiler would need.
 
 **Ready today**
 
-- structs, `List(T)`, `text`, `int`, `float`, `bool`
+- structs, `List(T)`, `Map(text, V)`, `text`, `int`, `float`, `bool`
 - `enum` + `match` (the natural way to represent tokens and AST nodes)
 - `while` with `break` / `continue`
 - borrowing (`&`, `&mut`) — e.g. `&mut xs[0]` passed into a function
@@ -270,16 +285,14 @@ Brick-written compiler would need.
 
 **Still missing (in rough priority order)**
 
-1. `Map(K, V)` — a symbol table keyed by text; today you would use a `List` and
-   linear scan. (§13 lists map and set.)
-2. `import` — split the compiler across files; the keyword parses but is not
+1. `import` — split the compiler across files; the keyword parses but is not
    resolved yet.
-3. a text builder — `text` is immutable C strings, so building output by `+` is
+2. a text builder — `text` is immutable C strings, so building output by `+` is
    quadratic; a growable buffer is wanted.
-4. top-level `const` (and maybe `var`) — for keyword tables and similar.
-5. `for x in xs { ... }` — pure sugar the spec already describes as a rewrite
+3. top-level `const` (and maybe `var`) — for keyword tables and similar.
+4. `for x in xs { ... }` — pure sugar the spec already describes as a rewrite
    into `while` (§5).
-6. character literals (`'a'`) — today `s[i]` yields an `int` byte, which works
+5. character literals (`'a'`) — today `s[i]` yields an `int` byte, which works
    but reads poorly.
 
 Each will land the same way as the features above: implemented across the lexer
