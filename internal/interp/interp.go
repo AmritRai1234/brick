@@ -192,6 +192,9 @@ func (in *interp) execStmt(s ast.Stmt, env *Env) error {
 		return err
 	case *ast.BlockStmt:
 		return in.execStmts(st.Stmts, newEnv(env))
+	case *ast.ArenaStmt:
+		// The interpreter has no memory to reclaim; an arena is just a scope.
+		return in.execStmt(st.Body, env)
 	case *ast.IfStmt:
 		c, err := in.eval(st.Cond, env)
 		if err != nil {

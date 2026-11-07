@@ -1,0 +1,22 @@
+// Arenas (§6): a scoped region of memory. Everything allocated inside the block
+// is freed together at the closing brace, so freeing is one pass, not one free
+// per object. Data must not outlive its arena.
+function main() {
+    var total = 0
+
+    arena {
+        var xs = List(int)
+        var i = 0
+        while i < 100 {
+            xs.push(i)
+            i = i + 1
+        }
+        var j = 0
+        while j < xs.len {
+            total = total + xs[j]
+            j = j + 1
+        }
+    } // the memory for xs is released here
+
+    print(total) // 4950
+}

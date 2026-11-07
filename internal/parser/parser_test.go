@@ -120,3 +120,18 @@ func TestParseIndexAndListType(t *testing.T) {
 		t.Errorf("return value should be an index expression, got %T", ret.Value)
 	}
 }
+
+func TestParseArena(t *testing.T) {
+	prog, err := Parse(`function main() { arena { var x = 1 } }`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fd := prog.Stmts[0].(*ast.FuncDecl)
+	ar, ok := fd.Body.Stmts[0].(*ast.ArenaStmt)
+	if !ok {
+		t.Fatalf("want ArenaStmt, got %T", fd.Body.Stmts[0])
+	}
+	if ar.Body == nil || len(ar.Body.Stmts) != 1 {
+		t.Fatalf("arena body not parsed: %+v", ar.Body)
+	}
+}

@@ -329,6 +329,11 @@ func (c *Checker) checkStmt(s ast.Stmt) {
 		}
 		c.checkStmt(st.Body)
 
+	case *ast.ArenaStmt:
+		// An arena is a scope: names declared inside do not escape, and the
+		// memory is freed at the end of the block (§6).
+		c.checkStmt(st.Body)
+
 	case *ast.MatchStmt:
 		c.checkMatch(st)
 

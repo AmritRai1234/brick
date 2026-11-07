@@ -173,6 +173,8 @@ func (g *Gen) assignSlots(b *ast.BlockStmt, next *int) {
 			}
 		case *ast.WhileStmt:
 			g.assignSlots(st.Body, next)
+		case *ast.ArenaStmt:
+			g.assignSlots(st.Body, next)
 		}
 	}
 }
@@ -275,6 +277,9 @@ func (g *Gen) genStmt(s ast.Stmt) {
 		g.genStmt(st.Body)
 		g.line("  jmp " + startL)
 		g.line(endL + ":")
+
+	case *ast.ArenaStmt:
+		g.errorf("arena is not supported by the native backend yet")
 
 	default:
 		g.errorf("statement %T", s)

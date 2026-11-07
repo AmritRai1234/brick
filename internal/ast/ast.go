@@ -201,6 +201,14 @@ type WhileStmt struct {
 	Body *BlockStmt
 }
 
+// ArenaStmt opens a scoped region of memory (§6). Everything allocated inside
+// the block is freed together when the block ends.
+type ArenaStmt struct {
+	base
+	Body *BlockStmt
+}
+
+func (*ArenaStmt) stmtNode()  {}
 func (*VarStmt) stmtNode()    {}
 func (*AssignStmt) stmtNode() {}
 func (*ReturnStmt) stmtNode() {}
@@ -360,6 +368,10 @@ func dumpStmt(b *strings.Builder, s Stmt, d int) {
 			b.WriteString("else:\n")
 			dumpStmt(b, st.Else, d+2)
 		}
+	case *ArenaStmt:
+		indent(b, d)
+		b.WriteString("Arena\n")
+		dumpStmt(b, st.Body, d+1)
 	case *WhileStmt:
 		indent(b, d)
 		b.WriteString("While\n")

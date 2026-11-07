@@ -177,3 +177,24 @@ func TestNoArgsPlumbingWhenUnused(t *testing.T) {
 		t.Errorf("main should be int main(void) when args() is unused\n%s", out)
 	}
 }
+
+func TestArenaCodegen(t *testing.T) {
+	out := gen(t, `
+	function main() {
+		arena {
+			var xs = List(int)
+			xs.push(1)
+		}
+	}`)
+	for _, want := range []string{
+		"BrickArena brick_arena_1;",
+		"brick_arena_enter(&brick_arena_1);",
+		"brick_arena_leave(&brick_arena_1);",
+		"static inline void *brick_alloc(size_t n)",
+		"static inline void *brick_resize(",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q", want)
+		}
+	}
+}

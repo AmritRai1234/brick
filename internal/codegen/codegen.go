@@ -17,6 +17,7 @@ type Generator struct {
 	b        strings.Builder
 	indent   int
 	tmpN     int
+	arenaN   int
 	usesArgs bool
 	inMain   bool
 }
@@ -117,6 +118,111 @@ static inline void brick_panic_memory(void)
     exit(1);
 }
 
+/*
+ * Arenas (§6). An arena block owns a chain of chunks with a bump pointer.
+ * brick_arena_enter() makes it the active region; allocations made while it is
+ * active come from it and are released together by brick_arena_leave(), so
+ * freeing is one pass over the chunks instead of a free per object.
+ *
+ * Data allocated inside an arena must not outlive the block that owns it.
+ */
+#define BRICK_ARENA_CHUNK 65536
+
+typedef struct BrickArenaChunk
+{
+    struct BrickArenaChunk *prev;
+    size_t                  used;
+    size_t                  cap;
+} BrickArenaChunk;
+
+typedef struct BrickArena
+{
+    struct BrickArena *parent;
+    BrickArenaChunk   *chunk;
+} BrickArena;
+
+static BrickArena *brick_arena_top = NULL;
+
+static inline void *brick_arena_raw(size_t n)
+{
+    BrickArenaChunk *chunk;
+    size_t           cap;
+    void            *p;
+
+    n = (n + 15u) & ~(size_t)15u;   /* keep 16-byte alignment */
+    chunk = brick_arena_top->chunk;
+    if (chunk == NULL || chunk->used + n > chunk->cap) {
+        cap = n > BRICK_ARENA_CHUNK ? n : BRICK_ARENA_CHUNK;
+        chunk = malloc(sizeof(BrickArenaChunk) + cap);
+        if (chunk == NULL) {
+            brick_panic_memory();
+        }
+        chunk->prev = brick_arena_top->chunk;
+        chunk->used = 0;
+        chunk->cap  = cap;
+        brick_arena_top->chunk = chunk;
+    }
+    p = (char *)chunk + sizeof(BrickArenaChunk) + chunk->used;
+    chunk->used += n;
+    return p;
+}
+
+static inline void brick_arena_enter(BrickArena *arena)
+{
+    arena->parent = brick_arena_top;
+    arena->chunk  = NULL;
+    brick_arena_top = arena;
+}
+
+static inline void brick_arena_leave(BrickArena *arena)
+{
+    BrickArenaChunk *chunk = arena->chunk;
+
+    while (chunk != NULL) {
+        BrickArenaChunk *prev = chunk->prev;
+        free(chunk);
+        chunk = prev;
+    }
+    brick_arena_top = arena->parent;
+}
+
+/* Allocate n bytes from the active arena, or the heap when there is none. */
+static inline void *brick_alloc(size_t n)
+{
+    void *p;
+
+    if (brick_arena_top != NULL) {
+        return brick_arena_raw(n);
+    }
+    p = malloc(n);
+    if (p == NULL) {
+        brick_panic_memory();
+    }
+    return p;
+}
+
+/*
+ * Resize a buffer to newsize bytes. Inside an arena the old buffer is left for
+ * the arena to reclaim; otherwise realloc is used as usual.
+ */
+static inline void *brick_resize(void *old, size_t oldsize, size_t newsize)
+{
+    void *p;
+
+    if (brick_arena_top != NULL) {
+        p = brick_arena_raw(newsize);
+        if (old != NULL) {
+            memcpy(p, old, oldsize);
+        }
+        return p;
+    }
+    p = realloc(old, newsize);
+    if (p == NULL) {
+        brick_panic_memory();
+    }
+    return p;
+}
+
 static inline BrickList brick_list_new(int64_t elem)
 {
     BrickList list;
@@ -140,10 +246,9 @@ static inline void brick_list_grow(BrickList *list, int64_t needed)
     if (cap < needed) {
         cap = needed;
     }
-    list->data = realloc(list->data, (size_t)(cap * list->elem));
-    if (list->data == NULL) {
-        brick_panic_memory();
-    }
+    list->data = brick_resize(list->data,
+                              (size_t)(list->cap * list->elem),
+                              (size_t)(cap * list->elem));
     list->cap = cap;
 }
 
@@ -426,6 +531,21 @@ func (g *Generator) emitStmt(s ast.Stmt) {
 
 	case *ast.AssignStmt:
 		g.line(fmt.Sprintf("%s = %s;", g.expr(st.Target), g.expr(st.Value)))
+
+	case *ast.ArenaStmt:
+		g.arenaN++
+		name := fmt.Sprintf("brick_arena_%d", g.arenaN)
+		g.line("/* arena: allocations below are freed together at the closing brace */")
+		g.line("{")
+		g.indent++
+		g.line("BrickArena " + name + ";")
+		g.line("brick_arena_enter(&" + name + ");")
+		for _, inner := range st.Body.Stmts {
+			g.emitStmt(inner)
+		}
+		g.line("brick_arena_leave(&" + name + ");")
+		g.indent--
+		g.line("}")
 
 	case *ast.ReturnStmt:
 		if st.Value == nil {
@@ -749,6 +869,8 @@ func programUsesArgs(prog *ast.Program) bool {
 			}
 		case *ast.WhileStmt:
 			walkExpr(st.Cond)
+			walkStmt(st.Body)
+		case *ast.ArenaStmt:
 			walkStmt(st.Body)
 		case *ast.MatchStmt:
 			walkExpr(st.Scrutinee)

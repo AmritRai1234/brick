@@ -220,3 +220,27 @@ func TestReadFileArgType(t *testing.T) {
 		t.Fatal("want an error for a non-text path")
 	}
 }
+
+func TestArenaScope(t *testing.T) {
+	src := `
+	function main() {
+		arena {
+			var xs = List(int)
+			xs.push(1)
+		}
+	}`
+	if _, err := check(t, src); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestArenaValueDoesNotEscape(t *testing.T) {
+	src := `
+	function main() {
+		arena { var xs = List(int) }
+		print(xs.len)
+	}`
+	if _, err := check(t, src); err == nil {
+		t.Fatal("want an error: an arena-local name must not escape the block")
+	}
+}

@@ -126,6 +126,23 @@ function main() {
 }
 ```
 
+Arenas free a whole region at once, which is often faster than `malloc`/`free`
+per object:
+
+```brick
+function main() {
+    arena {
+        var xs = List(int)
+        var i = 0
+        while i < 1000 {
+            xs.push(i)
+            i = i + 1
+        }
+        print(xs.len)
+    }   // every allocation above is released here, in one pass
+}
+```
+
 Generates readable C you can read side-by-side with the source (K&R style,
 Clean Code naming, `static` linkage, no hidden state):
 
@@ -165,9 +182,12 @@ Mapped to the roadmap in the spec (§15):
       forward references; builtin `print`
 - [x] **5. `struct`, then `extern`** — struct literals, field access, borrowing
       with `&` / `&mut` (temporary only), and calls into C
-- [~] **6. Borrowing, arenas, `enum`/`match`, errors** — `enum` + `match` done:
+- [x] **6. Borrowing, arenas, `enum`/`match`, errors** — `enum` + `match`:
       tagged variants with payloads, bindings, wildcard, and exhaustiveness
-      checking. Errors-as-values (§7) work via enums. Arenas not yet.
+      checking. Errors-as-values (§7) work via enums. Borrowing with `&`/`&mut`.
+      `arena { ... }` opens a scoped region (§6): allocations inside come from a
+      chunked bump allocator and are freed together at the block's closing
+      brace. Arena-local names do not escape the block (see `examples/arena.brick`).
 - [x] **Collections and text** — `List(T)` (growable: `push`, indexing, `.len`,
       assign to an index) and text (`.len`, `s[i]` as a byte, `+` concatenation,
       `==` / `!=`). These are the pieces a lexer and parser are built from.
@@ -241,11 +261,11 @@ example in `examples/` is a working end-to-end case.
 
 ## Roadmap next steps
 
-The differential-testing interpreter (§10) and the formatter (§11) are in
-place: `make diff` checks the interpreter and compiled binary agree on every
-example, and `make fmt-check` verifies they are canonically formatted. The
-natural next pieces (spec §15, §16) are arenas and a language server. See
-`docs/SPEC.md` for the full plan.
+Arenas (§6), the differential-testing interpreter (§10) and the formatter (§11)
+are all in place: `make diff` checks the interpreter and compiled binary agree on
+every example, and `make fmt-check` verifies they are canonically formatted. What
+remains from the roadmap (spec §15, §16) is the language server and self-hosting.
+See `docs/SPEC.md` for the full plan.
 
 Calling into C now works end to end: the compiler links any `.c` files that sit
 next to the `.brick` source, so `examples/extern.brick` (which calls `triple`

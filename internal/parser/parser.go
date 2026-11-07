@@ -130,6 +130,8 @@ func (p *Parser) parseStmt() ast.Stmt {
 		return p.parseIf()
 	case token.WHILE:
 		return p.parseWhile()
+	case token.ARENA:
+		return p.parseArena()
 	case token.RETURN:
 		return p.parseReturn()
 	case token.LBRACE:
@@ -203,6 +205,14 @@ func (p *Parser) parseWhile() ast.Stmt {
 	p.noStructLit++
 	s.Cond = p.parseExpr()
 	p.noStructLit--
+	s.Body = p.parseBlock()
+	return s
+}
+
+func (p *Parser) parseArena() ast.Stmt {
+	a := p.advance() // arena
+	s := &ast.ArenaStmt{}
+	ast.SetBase(s, a)
 	s.Body = p.parseBlock()
 	return s
 }
