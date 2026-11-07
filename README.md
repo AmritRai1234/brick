@@ -289,7 +289,11 @@ Mapped to the roadmap in the spec (§15):
       `print_bytes` made the whole front end byte-exact: token literals, AST
       string nodes and the dumps carry exact bytes, so every stage matches the
       Go compiler on `selfhost/*.brick` too, whose sources contain `\0`
-      literals (see `selfhost/README.md`).
+      literals (see `selfhost/README.md`). It also builds itself:
+      `make bootstrap` builds stage 1 with the Go compiler, uses stage 1 to
+      compile `brickc.brick` into stage 2, and stage 2 into stage 3 — every
+      stage emits identical C for every input, and stage 2 and stage 3 are
+      byte-identical, so the compiler has reached a fixpoint.
 
 ### Semantics enforced by the checker
 
@@ -374,7 +378,8 @@ itself — and that has happened: the lexer (`selfhost/lexer.brick`), parser
 (`selfhost/emitter.brick`) are self-hosted and verified against `brick tokdump`,
 `brick ast`, `brick typedump` and `brick emit` by `make selfhost`, and
 `selfhost/brickc.brick` wires all four stages into one self-hosted compiler
-(source in, C out) that `make selfhost-e2e` exercises end to end.
+(source in, C out) that `make selfhost-e2e` exercises end to end and that
+`make bootstrap` shows to compile itself.
 
 Each feature above landed the same way as the ones before it: implemented across
 the lexer/parser/checker/codegen/interpreter, with an example that `make diff`
@@ -410,7 +415,8 @@ away:
 | `v0.3.15` | single self-hosted compiler (`brickc.brick`); shared `codegen.brick` |
 | `v0.3.16` | `bytes`: length-carrying byte strings |
 | `v0.3.17` | byte-exact self-hosted lexer: token literals as `bytes` |
-| `v0.3.18` | `print_bytes`; byte-exact AST dump and emitter on `\0` literals (current) |
+| `v0.3.18` | `print_bytes`; byte-exact AST dump and emitter on `\0` literals |
+| `v0.3.19` | bootstrap: the self-hosted compiler compiles itself (identical C, stage 2 = stage 3) (current) |
 
 ```sh
 git tag                     # list the tags

@@ -1,4 +1,4 @@
-.PHONY: build test fmt fmt-check vet clean examples native diff interp selfhost selfhost-e2e backup
+.PHONY: build test fmt fmt-check vet clean examples native diff interp selfhost selfhost-e2e bootstrap backup
 
 build:
 	go build -o bin/brick ./cmd/brick
@@ -120,6 +120,25 @@ selfhost-e2e: selfhost
 	done; \
 	if [ $$fail -ne 0 ]; then echo "self-host end-to-end FAILED"; exit 1; fi; \
 	echo "selfhost-e2e ok: C from the single self-hosted compiler (brickc) compiles and runs like the Go compiler's"
+
+# Bootstrap (§15): the self-hosted compiler compiles its own source. Stage 1 is
+# built by the Go compiler; stage 2 is built by stage 1; stage 3 by stage 2.
+# Every stage must emit identical C for every input, and stage 2 and stage 3
+# must be byte-identical -- the self-hosting fixpoint.
+bootstrap: build
+	@./bin/brick build selfhost/brickc.brick -o /tmp/brickc1 >/dev/null || exit 1
+	@/tmp/brickc1 selfhost/brickc.brick -o /tmp/brickc2.c || exit 1
+	@cc -std=c11 -O0 -o /tmp/brickc2 /tmp/brickc2.c -lm || exit 1
+	@/tmp/brickc2 selfhost/brickc.brick -o /tmp/brickc3.c || exit 1
+	@cmp /tmp/brickc2.c /tmp/brickc3.c || { echo "bootstrap fixpoint FAILED"; exit 1; }
+	@fail=0; \
+	for f in examples/*.brick examples/lib/*.brick selfhost/*.brick; do \
+		if ! diff -q <(/tmp/brickc1 "$$f" -o -) <(/tmp/brickc2 "$$f" -o -) >/dev/null; then \
+			echo "bootstrap MISMATCH: $$f"; fail=1; \
+		fi; \
+	done; \
+	if [ $$fail -ne 0 ]; then echo "bootstrap FAILED"; exit 1; fi; \
+	echo "bootstrap ok: Go-built compiler → self-built compiler → itself (identical C)"
 
 # Write a single-file backup of the whole repo (all branches and tags) to
 # ../brick-backups. Restore with:  git clone <file>.bundle brick

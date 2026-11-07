@@ -130,6 +130,22 @@ over both sets.
 | Checker (+ type dump) | done — matches `brick typedump` on all examples and on `selfhost/*.brick` |
 | C emitter | done — matches `brick emit` on all examples and on `selfhost/*.brick`, including `bytes` and `\0` literals |
 | Single compiler (`brickc`) | done — source in, C out; matches `brick emit` on every input and compiles and runs like the Go compiler's |
+| Bootstrap | done — `make bootstrap`: stage 1 (Go-built) compiles `brickc.brick` into stage 2, stage 2 into stage 3; all stages emit identical C and stage 2 = stage 3 |
+
+## Bootstrapping
+
+The compiler is itself a Brick program, so it can compile itself:
+
+```sh
+make bootstrap
+```
+
+Stage 1 is built by the Go compiler (`bin/brick`), stage 2 is built by stage 1
+from `selfhost/brickc.brick`, and stage 3 is built by stage 2. The target then
+checks that every stage emits the same C for every example and every
+`selfhost/*.brick`, and that the C stage 2 and stage 3 emit from the same
+source is byte-identical — the fixpoint that says the self-hosted compiler is
+complete enough to rebuild itself exactly.
 
 ## Building a component by hand
 
