@@ -745,6 +745,15 @@ func (c *Checker) inferCall(ex *ast.CallExpr) ast.Type {
 		}
 		return voidT
 	}
+	if id.Name == "exit" {
+		if len(ex.Args) != 1 {
+			c.errorf(ex, "exit takes exactly 1 argument (a status), got %d", len(ex.Args))
+		}
+		if at := c.infer(ex.Args[0]); !at.Equals(intT) {
+			c.errorf(ex, "exit status must be int, got %s", at)
+		}
+		return voidT
+	}
 	if id.Name == "eprint" {
 		if len(ex.Args) != 1 {
 			c.errorf(ex, "eprint takes exactly 1 argument, got %d", len(ex.Args))

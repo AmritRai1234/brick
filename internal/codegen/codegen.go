@@ -1086,6 +1086,8 @@ func (g *Generator) expr(e ast.Expr) string {
 				return fmt.Sprintf("brick_print_bytes(%s)", g.expr(ex.Args[0]))
 			case "eprint":
 				return g.printCall("stderr", ex.Args[0])
+			case "exit":
+				return fmt.Sprintf("exit((int)(%s))", g.expr(ex.Args[0]))
 			case "read_file":
 				return fmt.Sprintf("brick_read_file(%s)", g.expr(ex.Args[0]))
 			case "write_file":

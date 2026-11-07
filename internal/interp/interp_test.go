@@ -2,6 +2,7 @@ package interp
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 
@@ -278,4 +279,18 @@ func TestToTextFloatBool(t *testing.T) {
 		print(to_text(false))  // false
 	}`
 	mustRun(t, src, "3.5\ntrue\ntrue\nfalse")
+}
+
+func TestExitBuiltin(t *testing.T) {
+	out, err := runInterp(t, `function main() { print("a") exit(3) print("b") }`)
+	var ee *ExitError
+	if !errors.As(err, &ee) {
+		t.Fatalf("want ExitError, got %v", err)
+	}
+	if ee.Code != 3 {
+		t.Fatalf("want status 3, got %d", ee.Code)
+	}
+	if strings.TrimRight(out, "\n") != "a" {
+		t.Fatalf("exit should stop main; output was %q", out)
+	}
 }

@@ -98,8 +98,24 @@ selfhost: build
 			echo "selfhost brickc MISMATCH (self source): $$f"; fail=1; \
 		fi; \
 	done; \
+	for f in testdata/errors/parse/*.brick; do \
+		if ! diff <(/tmp/brick-parse "$$f" 2>&1) <(./bin/brick errdump "$$f"); then \
+			echo "selfhost parser MISMATCH (diagnostic): $$f"; fail=1; \
+		fi; \
+	done; \
+	for f in testdata/errors/parse/*.brick testdata/errors/check/*.brick; do \
+		if ! diff <(/tmp/brick-check "$$f" 2>&1) <(./bin/brick errdump "$$f"); then \
+			echo "selfhost checker MISMATCH (diagnostic): $$f"; fail=1; \
+		fi; \
+		if ! diff <(/tmp/brick-emit "$$f" 2>&1) <(./bin/brick errdump "$$f"); then \
+			echo "selfhost emitter MISMATCH (diagnostic): $$f"; fail=1; \
+		fi; \
+		if ! diff <(/tmp/brickc "$$f" -o - 2>&1) <(./bin/brick errdump "$$f"); then \
+			echo "selfhost brickc MISMATCH (diagnostic): $$f"; fail=1; \
+		fi; \
+	done; \
 	if [ $$fail -ne 0 ]; then echo "self-hosting check FAILED"; exit 1; fi; \
-	echo "selfhost ok: lexer→tokdump, parser→ast, checker→typedump, emitter→emit, brickc→emit, every example and every selfhost source"
+	echo "selfhost ok: lexer→tokdump, parser→ast, checker→typedump, emitter→emit, brickc→emit, diagnostics→errdump, every example and every selfhost source"
 
 # End-to-end self-hosting: use the single Brick-written compiler (brickc) as the
 # compiler -- source .brick in, C out to a file -- then compile that C with the

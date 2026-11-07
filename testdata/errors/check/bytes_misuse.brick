@@ -1,0 +1,4 @@
+function main() {
+    var b = to_bytes(1)
+    print_bytes("hi")
+}

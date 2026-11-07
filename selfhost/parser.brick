@@ -19,6 +19,7 @@ struct Parser {
     toks: List(Token),
     pos: int,
     noStructLit: int,
+    failed: int,
 }
 
 // ---------- indentation helpers ----------
@@ -158,10 +159,20 @@ function describeTok(t: Token) -> text {
     return t.kind
 }
 
+// report prints the first parse error and remembers that the program is bad;
+// later ones are dropped, as the Go parser stops at its first error too.
+function reportP(p: &mut Parser, msg: text) {
+    if p.failed != 0 {
+        return
+    }
+    eprint(msg)
+    p.failed = 1
+}
+
 function expect(p: &mut Parser, k: text) -> Token {
     if !checkKind(p, k) {
         var t = cur(p)
-        eprint(to_text(t.line) + ":" + to_text(t.col) + ": expected \"" + k + "\", found \"" + describeTok(t) + "\"")
+        reportP(p, to_text(t.line) + ":" + to_text(t.col) + ": expected \"" + k + "\", found \"" + describeTok(t) + "\"")
     }
     return advance(p)
 }
@@ -622,7 +633,7 @@ function parsePrimary(p: &mut Parser) -> text {
         }
         return "Ident " + tok.lit + "\n"
     }
-    eprint(to_text(tok.line) + ":" + to_text(tok.col) + ": unexpected \"" + describeTok(tok) + "\"")
+    reportP(p, to_text(tok.line) + ":" + to_text(tok.col) + ": unexpected \"" + describeTok(tok) + "\"")
     return ""
 }
 
@@ -662,7 +673,7 @@ function newParser(src: text) -> Parser {
             done = true
         }
     }
-    return Parser{ toks: toks, pos: 0, noStructLit: 0 }
+    return Parser{ toks: toks, pos: 0, noStructLit: 0, failed: 0 }
 }
 
 function dirOf(path: text) -> text {
@@ -696,6 +707,7 @@ function importFileName(p: text) -> text {
 struct Loaded {
     text: text,
     done: List(text),
+    failed: int,
 }
 
 // Depth-first: emit imported files' declarations, then this file's own,
@@ -710,7 +722,7 @@ function loadFile(path: text, done: List(text)) -> Loaded {
         i = i + 1
     }
     if already {
-        return Loaded{ text: "", done: done }
+        return Loaded{ text: "", done: done, failed: 0 }
     }
     done.push(path)
     var src = read_file(path)
@@ -732,11 +744,15 @@ function loadFile(path: text, done: List(text)) -> Loaded {
         }
     }
     var out = Builder()
+    var failed = p.failed
     i = 0
     while i < imports.len {
         var r = loadFile(joinPath(dir, importFileName(imports[i])), done)
         out.add(r.text)
         done = r.done
+        if r.failed != 0 {
+            failed = 1
+        }
         i = i + 1
     }
     i = 0
@@ -744,7 +760,7 @@ function loadFile(path: text, done: List(text)) -> Loaded {
         out.add(bodies[i])
         i = i + 1
     }
-    return Loaded{ text: out.build(), done: done }
+    return Loaded{ text: out.build(), done: done, failed: failed }
 }
 
 function main() {
@@ -754,6 +770,9 @@ function main() {
         return
     }
     var r = loadFile(argv[1], List(text))
+    if r.failed != 0 {
+        exit(1)
+    }
     // The dump ends with a newline already; print_bytes adds none, so NULs in
     // string literals reach the output instead of truncating a text value.
     print_bytes(unprotect(r.text))

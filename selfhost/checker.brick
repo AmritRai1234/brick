@@ -126,7 +126,12 @@ function main() {
     var c = newChecker()
     var r = loadFile(&mut c, argv[1], List(text))
     collect(&mut c, r.top)
-    checkBodies(&mut c, r.top)
+    if c.failed == 0 {
+        checkBodies(&mut c, r.top)
+    }
+    if c.failed != 0 {
+        exit(1)
+    }
     dumpProgram(&mut c, r.top)
     if c.out.len > 0 {
         print(joinLines(c.out))

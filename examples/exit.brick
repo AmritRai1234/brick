@@ -1,0 +1,12 @@
+// exit(status) stops the program at once, with the given status code.
+// Everything after the call is skipped, and the process ends with `status`.
+function main() {
+    print("starting")
+    var ok = 2 + 2 == 4
+    if !ok {
+        exit(1)
+    }
+    print("all good")
+    exit(3)
+    print("never printed")
+}

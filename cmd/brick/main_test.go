@@ -51,3 +51,16 @@ func TestCompanionCFilesNoCompanions(t *testing.T) {
 		t.Errorf("expected no files, got %v", got)
 	}
 }
+
+func TestFirstDiagnostic(t *testing.T) {
+	cases := []struct{ src, want string }{
+		{`function main() { print(1) }`, ""},
+		{"function main() {\n    print((1 + 2)\n}\n", `3:1: expected ")", found "}"`},
+		{"function main() {\n    var x: int = \"hi\"\n}\n", `2:5: cannot assign text to "int" (no implicit conversion)`},
+	}
+	for _, tc := range cases {
+		if got := firstDiagnostic(tc.src); got != tc.want {
+			t.Errorf("firstDiagnostic(%q) = %q, want %q", tc.src, got, tc.want)
+		}
+	}
+}

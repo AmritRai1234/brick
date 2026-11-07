@@ -293,7 +293,12 @@ Mapped to the roadmap in the spec (§15):
       `make bootstrap` builds stage 1 with the Go compiler, uses stage 1 to
       compile `brickc.brick` into stage 2, and stage 2 into stage 3 — every
       stage emits identical C for every input, and stage 2 and stage 3 are
-      byte-identical, so the compiler has reached a fixpoint.
+      byte-identical, so the compiler has reached a fixpoint. Its diagnostics
+      match too: like the Go front end it stops at the first error, words it
+      the same way, and (via the new `exit(status)` builtin) exits non-zero
+      without writing C. `brick errdump` prints that first diagnostic in a
+      canonical form, and `make selfhost` diffs it against the self-hosted
+      parser, checker, emitter and `brickc` over `testdata/errors/`.
 
 ### Semantics enforced by the checker
 
@@ -368,7 +373,8 @@ Brick-written compiler would need.
 - top-level `const` — computed at compile time and inlined
 - `arena { ... }` for bulk allocation
 - `slice(text, start, end) -> text` — extract a byte range of a string
-- output via `print` / `eprint`
+- output via `print` / `eprint`, and `exit(status)` to stop a program with a
+  status code (the interpreter and the compiled binary both honour it)
 
 With those in place, every box in the audit is ticked: Brick can express a
 lexer, a parser, symbol tables, type checking and a C emitter. The roadmap's
@@ -416,7 +422,8 @@ away:
 | `v0.3.16` | `bytes`: length-carrying byte strings |
 | `v0.3.17` | byte-exact self-hosted lexer: token literals as `bytes` |
 | `v0.3.18` | `print_bytes`; byte-exact AST dump and emitter on `\0` literals |
-| `v0.3.19` | bootstrap: the self-hosted compiler compiles itself (identical C, stage 2 = stage 3) (current) |
+| `v0.3.19` | bootstrap: the self-hosted compiler compiles itself (identical C, stage 2 = stage 3) |
+| `v0.3.20` | `exit(status)`; `brick errdump`; self-hosted diagnostics match the Go compiler (current) |
 
 ```sh
 git tag                     # list the tags

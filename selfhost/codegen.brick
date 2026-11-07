@@ -607,6 +607,9 @@ function emitCall(em: &mut Emitter, n: Node) -> text {
         if nm == "eprint" {
             return printCall(em, "stderr", n.args[0])
         }
+        if nm == "exit" {
+            return "exit((int)(" + expr(em, n.args[0]) + "))"
+        }
         if nm == "read_file" {
             return "brick_read_file(" + expr(em, n.args[0]) + ")"
         }

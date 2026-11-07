@@ -375,3 +375,10 @@ func TestBytesRuntimeOnlyWhenUsed(t *testing.T) {
 		}
 	}
 }
+
+func TestExitCodegen(t *testing.T) {
+	out := gen(t, `function main() { exit(2) }`)
+	if !strings.Contains(out, "exit((int)(2))") {
+		t.Errorf("expected a direct exit() call, got:\n%s", out)
+	}
+}

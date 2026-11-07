@@ -36,6 +36,10 @@ function nameOf(t: text) -> text {
     return s
 }
 
+function isRef(t: text) -> bool {
+    return t.len >= 1 && t[0] == '&'
+}
+
 function isList(t: text) -> bool {
     return t.len >= 5 && slice(t, 0, 4) == "List" && t[4] == '('
 }
@@ -188,6 +192,7 @@ struct Checker {
     out: List(text),
     curRet: text,
     inMain: int,
+    failed: int,
 }
 
 function newChecker() -> Checker {
@@ -196,7 +201,7 @@ function newChecker() -> Checker {
         nodes: List(Node), funcs: List(FuncInfo), structs: List(StructInfo),
         enums: List(EnumInfo), consts: List(ConstInfo),
         varNames: List(text), varTys: List(text), scopeBase: List(int),
-        out: List(text), curRet: "", inMain: 0,
+        out: List(text), curRet: "", inMain: 0, failed: 0,
     }
 }
 
@@ -257,7 +262,7 @@ function describeTok(t: Token) -> text {
 function expect(c: &mut Checker, k: text) -> Token {
     if !checkKind(c, k) {
         var t = cur(c)
-        eprint(to_text(t.line) + ":" + to_text(t.col) + ": expected \"" + k + "\", found \"" + describeTok(t) + "\"")
+        report(c, to_text(t.line) + ":" + to_text(t.col) + ": expected \"" + k + "\", found \"" + describeTok(t) + "\"")
     }
     return advance(c)
 }
@@ -265,6 +270,17 @@ function expect(c: &mut Checker, k: text) -> Token {
 function mkn(c: &mut Checker, n: Node) -> int {
     c.nodes.push(n)
     return c.nodes.len - 1
+}
+
+// report prints the first diagnostic and remembers that the program is bad.
+// Later diagnostics are dropped: the Go compiler stops at the first error
+// (its errorf panics), so printing one keeps the two front ends comparable.
+function report(c: &mut Checker, msg: text) {
+    if c.failed != 0 {
+        return
+    }
+    eprint(msg)
+    c.failed = 1
 }
 
 // ---------- parser ----------
@@ -773,7 +789,7 @@ function parsePrimary(c: &mut Checker) -> int {
         n.name = tok.lit
         return mkn(c, n)
     }
-    eprint(to_text(tok.line) + ":" + to_text(tok.col) + ": unexpected \"" + describeTok(tok) + "\"")
+    report(c, to_text(tok.line) + ":" + to_text(tok.col) + ": unexpected \"" + describeTok(tok) + "\"")
     return mkn(c, nd("Int", tok.line, tok.col))
 }
 
@@ -967,7 +983,7 @@ function declare(c: &mut Checker, name: text, t: text, line: int, col: int) {
     var i = b
     while i < c.varNames.len {
         if c.varNames[i] == name {
-            eprint(to_text(line) + ":" + to_text(col) + ": \"" + name + "\" is already declared in this scope")
+            report(c, to_text(line) + ":" + to_text(col) + ": \"" + name + "\" is already declared in this scope")
         }
         i = i + 1
     }
@@ -1006,7 +1022,7 @@ function evalConstNode(c: &mut Checker, idx: int) -> text {
     if k == "Ident" {
         var ci = findConst(c, n.name)
         if ci < 0 {
-            eprint(to_text(n.line) + ":" + to_text(n.col) + ": \"" + n.name + "\" is not a constant")
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": \"" + n.name + "\" is not a constant")
             return ""
         }
         var cc = c.consts[ci]
@@ -1024,7 +1040,7 @@ function evalConstNode(c: &mut Checker, idx: int) -> text {
                 return "bool"
             }
         }
-        eprint(to_text(n.line) + ":" + to_text(n.col) + ": bad constant operator " + n.name)
+        report(c, to_text(n.line) + ":" + to_text(n.col) + ": bad constant operator " + n.name)
         return ""
     }
     if k == "Binary" {
@@ -1061,7 +1077,7 @@ function evalConstNode(c: &mut Checker, idx: int) -> text {
                 return "bool"
             }
         }
-        eprint(to_text(n.line) + ":" + to_text(n.col) + ": bad constant expression")
+        report(c, to_text(n.line) + ":" + to_text(n.col) + ": bad constant expression")
         return ""
     }
     return ""
@@ -1145,7 +1161,7 @@ function inferInner(c: &mut Checker, idx: int) -> text {
             var cc = c.consts[ci]
             return cc.ty
         }
-        eprint(to_text(n.line) + ":" + to_text(n.col) + ": undefined name \"" + n.name + "\"")
+        report(c, to_text(n.line) + ":" + to_text(n.col) + ": undefined name \"" + n.name + "\"")
         return ""
     }
     if k == "Unary" {
@@ -1166,7 +1182,7 @@ function inferInner(c: &mut Checker, idx: int) -> text {
     if k == "StructLit" {
         return inferStructLit(c, idx)
     }
-    eprint("internal error: unhandled expression " + k)
+    report(c, "internal error: unhandled expression " + k)
     return ""
 }
 
@@ -1175,13 +1191,13 @@ function inferUnary(c: &mut Checker, idx: int) -> text {
     var t = infer(c, n.e1)
     if n.name == "-" {
         if !isNumericText(t) {
-            eprint(to_text(n.line) + ":" + to_text(n.col) + ": '-' needs a number, got " + t)
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": '-' needs a number, got " + t)
         }
         return t
     }
     if n.name == "!" {
         if t != "bool" {
-            eprint(to_text(n.line) + ":" + to_text(n.col) + ": '!' needs bool, got " + t)
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": '!' needs bool, got " + t)
         }
         return "bool"
     }
@@ -1201,40 +1217,43 @@ function inferBinary(c: &mut Checker, idx: int) -> text {
             return "text"
         }
         if !isNumericText(l) || !isNumericText(r) {
-            eprint(to_text(n.line) + ":" + to_text(n.col) + ": '+' needs numbers or two texts")
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": operator \"" + op + "\" needs numbers or two texts, got " + l + " and " + r)
         }
         if l != r {
-            eprint(to_text(n.line) + ":" + to_text(n.col) + ": '+' needs matching types")
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": operator \"" + op + "\" needs matching types, got " + l + " and " + r)
         }
         return l
     }
     if op == "-" || op == "*" || op == "/" {
         if !isNumericText(l) || !isNumericText(r) {
-            eprint(to_text(n.line) + ":" + to_text(n.col) + ": arithmetic needs numbers")
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": operator \"" + op + "\" needs numbers, got " + l + " and " + r)
         }
         if l != r {
-            eprint(to_text(n.line) + ":" + to_text(n.col) + ": arithmetic needs matching types")
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": operator \"" + op + "\" needs matching types, got " + l + " and " + r)
         }
         return l
     }
     if op == "%" {
+        if l != "int" || r != "int" {
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": operator \"%\" needs ints, got " + l + " and " + r)
+        }
         return "int"
     }
     if op == "<" || op == "<=" || op == ">" || op == ">=" {
         if !isNumericText(l) || l != r {
-            eprint(to_text(n.line) + ":" + to_text(n.col) + ": comparison needs two matching numbers")
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": operator \"" + op + "\" needs two matching numbers, got " + l + " and " + r)
         }
         return "bool"
     }
     if op == "==" || op == "!=" {
         if l != r {
-            eprint(to_text(n.line) + ":" + to_text(n.col) + ": comparison needs matching types")
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": operator \"" + op + "\" needs matching types, got " + l + " and " + r)
         }
         return "bool"
     }
     if op == "&&" || op == "||" {
         if l != "bool" || r != "bool" {
-            eprint(to_text(n.line) + ":" + to_text(n.col) + ": logical operator needs bools")
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": operator \"" + op + "\" needs bools, got " + l + " and " + r)
         }
         return "bool"
     }
@@ -1244,7 +1263,10 @@ function inferBinary(c: &mut Checker, idx: int) -> text {
 function inferIndex(c: &mut Checker, idx: int) -> text {
     var n = c.nodes[idx]
     var bt = infer(c, n.e1)
-    infer(c, n.e2)
+    var it = infer(c, n.e2)
+    if it != "int" {
+        report(c, to_text(n.line) + ":" + to_text(n.col) + ": index must be int, got " + it)
+    }
     if isList(bt) {
         return listElem(bt)
     }
@@ -1254,7 +1276,7 @@ function inferIndex(c: &mut Checker, idx: int) -> text {
     if bt == "bytes" {
         return "int"
     }
-    eprint(to_text(n.line) + ":" + to_text(n.col) + ": cannot index " + bt)
+    report(c, to_text(n.line) + ":" + to_text(n.col) + ": cannot index a value of type " + bt)
     return ""
 }
 
@@ -1266,11 +1288,11 @@ function inferField(c: &mut Checker, idx: int) -> text {
         if ei >= 0 {
             var vf = enumVariantFields(c, ei, n.name)
             if vf.len != 0 {
-                eprint(to_text(n.line) + ":" + to_text(n.col) + ": variant needs arguments")
+                report(c, to_text(n.line) + ":" + to_text(n.col) + ": variant needs arguments")
             }
             return bn.name
         }
-        eprint(to_text(bn.line) + ":" + to_text(bn.col) + ": undefined name \"" + bn.name + "\"")
+        report(c, to_text(bn.line) + ":" + to_text(bn.col) + ": undefined name \"" + bn.name + "\"")
         return ""
     }
     var bt = infer(c, n.e1)
@@ -1282,13 +1304,13 @@ function inferField(c: &mut Checker, idx: int) -> text {
     }
     var si = findStruct(c, nameOf(bt))
     if si < 0 {
-        eprint(to_text(n.line) + ":" + to_text(n.col) + ": cannot access field \"" + n.name + "\" on " + bt)
+        report(c, to_text(n.line) + ":" + to_text(n.col) + ": cannot access field \"" + n.name + "\" on non-struct type " + bt)
         return ""
     }
     var s = c.structs[si]
     var fi = indexOf(s.fnames, n.name)
     if fi < 0 {
-        eprint(to_text(n.line) + ":" + to_text(n.col) + ": struct " + nameOf(bt) + " has no field " + n.name)
+        report(c, to_text(n.line) + ":" + to_text(n.col) + ": struct " + nameOf(bt) + " has no field \"" + n.name + "\"")
         return ""
     }
     return s.ftys[fi]
@@ -1298,7 +1320,7 @@ function inferStructLit(c: &mut Checker, idx: int) -> text {
     var n = c.nodes[idx]
     var si = findStruct(c, n.name)
     if si < 0 {
-        eprint(to_text(n.line) + ":" + to_text(n.col) + ": unknown struct " + n.name)
+        report(c, to_text(n.line) + ":" + to_text(n.col) + ": unknown struct " + n.name)
         return ""
     }
     var s = c.structs[si]
@@ -1308,7 +1330,7 @@ function inferStructLit(c: &mut Checker, idx: int) -> text {
         var fi = indexOf(s.fnames, n.names[i])
         if fi >= 0 {
             if vt != s.ftys[fi] {
-                eprint(to_text(n.line) + ":" + to_text(n.col) + ": field " + n.names[i] + " wants " + s.ftys[fi] + ", got " + vt)
+                report(c, to_text(n.line) + ":" + to_text(n.col) + ": field " + n.names[i] + " wants " + s.ftys[fi] + ", got " + vt)
             }
         }
         i = i + 1
@@ -1322,29 +1344,29 @@ function inferMapMethod(c: &mut Checker, idx: int, fieldName: text, bt: text) ->
     var vt = mapVal(bt)
     if fieldName == "set" {
         if n.args.len != 2 {
-            eprint(to_text(n.line) + ":" + to_text(n.col) + ": set takes 2 arguments")
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": set takes 2 arguments")
         }
         var ak = infer(c, n.args[0])
         if ak != kt {
-            eprint(to_text(n.line) + ":" + to_text(n.col) + ": map key must be " + kt + ", got " + ak)
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": map key must be " + kt + ", got " + ak)
         }
         var av = infer(c, n.args[1])
         if av != vt {
-            eprint(to_text(n.line) + ":" + to_text(n.col) + ": map value must be " + vt + ", got " + av)
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": map value must be " + vt + ", got " + av)
         }
         return "void"
     }
     if fieldName == "get" {
         var ak2 = infer(c, n.args[0])
         if ak2 != kt {
-            eprint(to_text(n.line) + ":" + to_text(n.col) + ": map key must be " + kt + ", got " + ak2)
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": map key must be " + kt + ", got " + ak2)
         }
         return vt
     }
     if fieldName == "has" {
         var ak3 = infer(c, n.args[0])
         if ak3 != kt {
-            eprint(to_text(n.line) + ":" + to_text(n.col) + ": map key must be " + kt + ", got " + ak3)
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": map key must be " + kt + ", got " + ak3)
         }
         return "bool"
     }
@@ -1360,7 +1382,7 @@ function inferBuilderMethod(c: &mut Checker, idx: int, fieldName: text) -> text 
     if fieldName == "build" {
         return "text"
     }
-    eprint(to_text(n.line) + ":" + to_text(n.col) + ": Builder has no method " + fieldName)
+    report(c, to_text(n.line) + ":" + to_text(n.col) + ": Builder has no method " + fieldName)
     return "void"
 }
 
@@ -1372,7 +1394,7 @@ function inferCall(c: &mut Checker, idx: int) -> text {
         if cn.name == "push" {
             var bt = infer(c, cn.e1)
             if !isList(bt) {
-                eprint(to_text(n.line) + ":" + to_text(n.col) + ": push needs a List, got " + bt)
+                report(c, to_text(n.line) + ":" + to_text(n.col) + ": push needs a List, got " + bt)
             }
             infer(c, n.args[0])
             return "void"
@@ -1404,18 +1426,28 @@ function inferCall(c: &mut Checker, idx: int) -> text {
         }
     }
     if cn.kind != "Ident" {
-        eprint(to_text(n.line) + ":" + to_text(n.col) + ": can only call named functions")
+        report(c, to_text(n.line) + ":" + to_text(n.col) + ": can only call named functions")
         return ""
     }
     var nm = cn.name
     if nm == "print" || nm == "eprint" {
-        infer(c, n.args[0])
+        var pt = infer(c, n.args[0])
+        if isRef(pt) {
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": " + nm + " cannot print a reference")
+        }
         return "void"
     }
     if nm == "print_bytes" {
         var bt = infer(c, n.args[0])
         if bt != "bytes" {
-            eprint(to_text(n.line) + ":" + to_text(n.col) + ": print_bytes expects bytes, got " + bt)
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": print_bytes expects bytes, got " + bt)
+        }
+        return "void"
+    }
+    if nm == "exit" {
+        var xt = infer(c, n.args[0])
+        if xt != "int" {
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": exit status must be int, got " + xt)
         }
         return "void"
     }
@@ -1442,17 +1474,23 @@ function inferCall(c: &mut Checker, idx: int) -> text {
         return "text"
     }
     if nm == "to_text" {
-        infer(c, n.args[0])
+        var tt = infer(c, n.args[0])
+        if tt != "int" && tt != "float" && tt != "bool" && tt != "bytes" {
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": to_text expects an int, float, bool or bytes, got " + tt)
+        }
         return "text"
     }
     if nm == "to_bytes" {
-        infer(c, n.args[0])
+        var tt = infer(c, n.args[0])
+        if tt != "text" {
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": to_bytes expects text, got " + tt)
+        }
         return "bytes"
     }
     if nm == "bytes" {
         var bt = infer(c, n.args[0])
         if !isList(bt) || listElem(bt) != "int" {
-            eprint(to_text(n.line) + ":" + to_text(n.col) + ": bytes(...) expects a List(int), got " + bt)
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": bytes(...) expects a List(int), got " + bt)
         }
         return "bytes"
     }
@@ -1460,13 +1498,25 @@ function inferCall(c: &mut Checker, idx: int) -> text {
         return "Builder"
     }
     if nm == "Map" {
+        if n.args.len != 2 {
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": Map(...) takes a key type and a value type, e.g. Map(text, int)")
+            return "Map"
+        }
         var a0 = c.nodes[n.args[0]]
         var a1 = c.nodes[n.args[1]]
+        if a0.kind != "Ident" {
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": Map(...) key must be a type name, e.g. Map(text, int)")
+            return "Map"
+        }
+        if a1.kind != "Ident" {
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": Map(...) value must be a type name, e.g. Map(text, int)")
+            return "Map"
+        }
         return "Map(" + a0.name + ", " + a1.name + ")"
     }
     var fi = findFunc(c, nm)
     if fi < 0 {
-        eprint(to_text(n.line) + ":" + to_text(n.col) + ": undefined function \"" + nm + "\"")
+        report(c, to_text(n.line) + ":" + to_text(n.col) + ": undefined function \"" + nm + "\"")
         return ""
     }
     var f = c.funcs[fi]
@@ -1523,7 +1573,7 @@ function checkStmt(c: &mut Checker, idx: int) {
         var vt = infer(c, n.e1)
         if n.t != "" {
             if n.t != vt {
-                eprint(to_text(n.line) + ":" + to_text(n.col) + ": cannot assign " + vt + " to " + n.t)
+                report(c, to_text(n.line) + ":" + to_text(n.col) + ": cannot assign " + vt + " to \"" + n.t + "\" (no implicit conversion)")
             }
             vt = n.t
         }
@@ -1535,14 +1585,14 @@ function checkStmt(c: &mut Checker, idx: int) {
         if n.e1 >= 0 {
             var vt = infer(c, n.e1)
             if c.curRet == "void" {
-                eprint(to_text(n.line) + ":" + to_text(n.col) + ": cannot return a value from a void function")
+                report(c, to_text(n.line) + ":" + to_text(n.col) + ": cannot return a value from a function that returns nothing")
             }
             if vt != c.curRet {
-                eprint(to_text(n.line) + ":" + to_text(n.col) + ": cannot return " + vt + " from " + c.curRet)
+                report(c, to_text(n.line) + ":" + to_text(n.col) + ": cannot return " + vt + " from a function that returns " + c.curRet)
             }
         } else {
             if c.curRet != "void" {
-                eprint(to_text(n.line) + ":" + to_text(n.col) + ": function must return " + c.curRet)
+                report(c, to_text(n.line) + ":" + to_text(n.col) + ": function must return a value of type " + c.curRet)
             }
         }
     } else if k == "ExprStmt" {
@@ -1556,13 +1606,19 @@ function checkStmt(c: &mut Checker, idx: int) {
         }
         popScope(c)
     } else if k == "If" {
-        infer(c, n.e1)
+        var ct = infer(c, n.e1)
+        if ct != "bool" {
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": if condition must be bool, got " + ct)
+        }
         checkStmt(c, n.e2)
         if n.e3 >= 0 {
             checkStmt(c, n.e3)
         }
     } else if k == "While" {
-        infer(c, n.e1)
+        var ct = infer(c, n.e1)
+        if ct != "bool" {
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": while condition must be bool, got " + ct)
+        }
         checkStmt(c, n.e2)
     } else if k == "Arena" {
         checkStmt(c, n.e1)
@@ -1571,6 +1627,8 @@ function checkStmt(c: &mut Checker, idx: int) {
         var et = "int"
         if isList(it) {
             et = listElem(it)
+        } else if it != "text" && it != "bytes" {
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": for can iterate a List or text, got " + it)
         }
         pushScope(c)
         declare(c, n.name, et, n.line, n.col)

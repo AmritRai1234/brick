@@ -20,6 +20,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -38,7 +39,7 @@ import (
 	"brick/internal/parser"
 )
 
-const version = "0.3.19"
+const version = "0.3.20"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -79,6 +80,15 @@ func main() {
 		_, _, file, _ := parseArgs(rest)
 		mustCheck(mustLoad(file))
 		fmt.Printf("%s: ok\n", file)
+	case "errdump":
+		// Canonical first diagnostic, used to verify a Brick-written front end
+		// reports the same error in the same words. Prints "line:col: msg" to
+		// stdout, or nothing when the program has no errors.
+		_, _, file, _ := parseArgs(rest)
+		src := readFile(file)
+		if msg := firstDiagnostic(src); msg != "" {
+			fmt.Println(msg)
+		}
 	case "typedump":
 		// Canonical, order-stable dump of every expression's inferred type.
 		// Used to verify a Brick-written checker against this one.
@@ -115,11 +125,15 @@ func main() {
 		_, _, file, progArgs := parseArgs(rest)
 		prog := mustLoad(file)
 		ck := mustCheck(prog)
-		if err := interp.Run(prog, ck, interp.Options{
+		err := interp.Run(prog, ck, interp.Options{
 			Args:   progArgs,
 			Stdout: os.Stdout,
 			Stderr: os.Stderr,
-		}); err != nil {
+		})
+		if ee, ok := err.(*interp.ExitError); ok {
+			os.Exit(ee.Code)
+		}
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "brick: %v\n", err)
 			os.Exit(1)
 		}
@@ -227,22 +241,48 @@ func diffRun(file, target string, progArgs []string) int {
 	cErr := cmd.Run()
 
 	agree := iout.String() == cout.String()
-	if agree && iErr == nil && cErr == nil {
+	iCode, iExited := exitStatus(iErr)
+	cCode, cExited := exitStatus(cErr)
+	if iExited != cExited || (iExited && iCode != cCode) {
+		agree = false
+	}
+	if agree && (iErr == nil || iExited) && (cErr == nil || cExited) {
 		fmt.Printf("agree: %s (via %s backend)\n", file, kind)
 		return 0
 	}
 	fmt.Fprintf(os.Stderr, "DISAGREE: %s\n", file)
-	if iErr != nil {
+	if iErr != nil && !iExited {
 		fmt.Fprintf(os.Stderr, "  interpreter error: %v\n", iErr)
 	}
-	if cErr != nil {
+	if cErr != nil && !cExited {
 		fmt.Fprintf(os.Stderr, "  compiled error:    %v\n", cErr)
+	}
+	if iExited || cExited {
+		fmt.Fprintf(os.Stderr, "  exit status: interpreter %d, compiled %d\n", iCode, cCode)
 	}
 	if !agree {
 		fmt.Fprintf(os.Stderr, "--- interpreter stdout ---\n%s", iout.String())
 		fmt.Fprintf(os.Stderr, "--- compiled stdout ----\n%s", cout.String())
 	}
 	return 1
+}
+
+// exitStatus reports whether err is a deliberate program exit and with what
+// status: the interpreter's exit(status) and a compiled binary that calls
+// exit() both end this way.
+func exitStatus(err error) (int, bool) {
+	if err == nil {
+		return 0, false
+	}
+	var ie *interp.ExitError
+	if errors.As(err, &ie) && ie.Code != 0 {
+		return ie.Code, true
+	}
+	var ee *exec.ExitError
+	if errors.As(err, &ee) && ee.ExitCode() != 0 {
+		return ee.ExitCode(), true
+	}
+	return 0, false
 }
 
 func programHasExtern(prog *ast.Program) bool {
@@ -270,6 +310,7 @@ Usage:
   brick emit  <file.brick>             print the generated C
   brick asm   <file.brick>             print the native x86-64 assembly
   brick check <file.brick>             type-check only
+  brick errdump <file.brick>           print the first diagnostic, else nothing
   brick typedump <file.brick>          machine-readable inferred-type dump (self-host checks)
   brick fmt   <file.brick>             reformat in place (--stdout, --check)
   brick lsp                            run the language server (stdio)
@@ -380,6 +421,20 @@ func readFile(path string) string {
 		os.Exit(1)
 	}
 	return string(data)
+}
+
+// firstDiagnostic parses and checks a single source and returns the first
+// diagnostic as "line:col: msg", or "" when the program is clean. It mirrors
+// the order the compiler itself uses: lex/parse first, then check.
+func firstDiagnostic(src string) string {
+	prog, err := parser.Parse(src)
+	if err != nil {
+		return fmt.Sprintf("%v", err)
+	}
+	if _, err := checker.Check(prog); err != nil {
+		return fmt.Sprintf("%v", err)
+	}
+	return ""
 }
 
 // mustLoad parses a file, resolves its imports and returns the merged program.

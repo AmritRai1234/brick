@@ -1,0 +1,5 @@
+function main() {
+    var x = 1
+    var x = 2
+    print(x)
+}

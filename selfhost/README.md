@@ -131,6 +131,27 @@ over both sets.
 | C emitter | done — matches `brick emit` on all examples and on `selfhost/*.brick`, including `bytes` and `\0` literals |
 | Single compiler (`brickc`) | done — source in, C out; matches `brick emit` on every input and compiles and runs like the Go compiler's |
 | Bootstrap | done — `make bootstrap`: stage 1 (Go-built) compiles `brickc.brick` into stage 2, stage 2 into stage 3; all stages emit identical C and stage 2 = stage 3 |
+| Diagnostics | done — stops at the first error, in the same words as the Go front end, and exits non-zero without emitting C; diffed against `brick errdump` over `testdata/errors/` |
+
+## Diagnostics
+
+The Go front end stops at the first error (its `errorf` panics), so the
+self-hosted front end does too: `report` / `reportP` print one diagnostic and
+then quietly drop the rest, and `checker.brick`, `emitter.brick` and `brickc`
+call the `exit(status)` builtin to fail without writing C.
+
+The messages are the same words the Go checker and parser use, including the
+quoted types (`cannot assign text to "int" (no implicit conversion)`), so the
+two can be compared directly:
+
+```sh
+brick errdump testdata/errors/check/assign_type.brick
+```
+
+`errdump` prints the first diagnostic as `line:col: msg` (nothing when the
+program is clean). `make selfhost` diffs it against the parser, checker, emitter
+and `brickc` over `testdata/errors/parse/` (parse errors) and
+`testdata/errors/check/` (type errors).
 
 ## Bootstrapping
 

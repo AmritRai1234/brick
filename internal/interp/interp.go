@@ -27,6 +27,14 @@ type RuntimeError struct {
 
 func (e *RuntimeError) Error() string { return fmt.Sprintf("%d:%d: %s", e.Line, e.Col, e.Msg) }
 
+// ExitError is raised by the exit(status) builtin: the program asks to stop
+// with the given status code instead of running to the end of main.
+type ExitError struct {
+	Code int
+}
+
+func (e *ExitError) Error() string { return fmt.Sprintf("exit(%d)", e.Code) }
+
 // ---------- values ----------
 
 // Value is any Brick runtime value.
@@ -687,6 +695,16 @@ func (in *interp) evalCall(ex *ast.CallExpr, env *Env) (Value, error) {
 			return nil, nil
 		case "eprint":
 			return nil, in.print(in.errw, ex.Args[0], env)
+		case "exit":
+			v, err := in.eval(ex.Args[0], env)
+			if err != nil {
+				return nil, err
+			}
+			code, ok := read(v).(int64)
+			if !ok {
+				return nil, &RuntimeError{Msg: "exit status must be int", Line: ex.Line, Col: ex.Col}
+			}
+			return nil, &ExitError{Code: int(code)}
 		case "read_file":
 			p, err := in.textArg(ex.Args[0], env)
 			if err != nil {

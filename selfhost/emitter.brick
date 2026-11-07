@@ -19,7 +19,12 @@ function main() {
     var c = newChecker()
     var r = loadFile(&mut c, argv[1], List(text))
     collect(&mut c, r.top)
-    checkBodies(&mut c, r.top)
+    if c.failed == 0 {
+        checkBodies(&mut c, r.top)
+    }
+    if c.failed != 0 {
+        exit(1)
+    }
     var s = renderProgram(c, r.top)
     // The buffer ends with a newline; print adds one of its own, so drop it
     // here to match `brick emit` byte-for-byte.

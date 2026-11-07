@@ -410,3 +410,18 @@ func TestRejectBytesMisuse(t *testing.T) {
 		t.Errorf("indexing bytes should yield int, got: %v", err)
 	}
 }
+
+func TestExitBuiltin(t *testing.T) {
+	if _, err := check(t, `function main() { exit(2) }`); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, src := range []string{
+		`function main() { exit() }`,
+		`function main() { exit("two") }`,
+		`function main() { exit(1, 2) }`,
+	} {
+		if _, err := check(t, src); err == nil {
+			t.Errorf("want an error for: %s", src)
+		}
+	}
+}

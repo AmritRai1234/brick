@@ -1,0 +1,7 @@
+function f() -> int {
+    return "x"
+}
+
+function main() {
+    print(f())
+}

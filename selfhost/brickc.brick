@@ -59,8 +59,17 @@ function main() {
 
     var c = newChecker()
     var r = loadFile(&mut c, input, List(text))
-    collect(&mut c, r.top)
-    checkBodies(&mut c, r.top)
+    if c.failed == 0 {
+        collect(&mut c, r.top)
+    }
+    if c.failed == 0 {
+        checkBodies(&mut c, r.top)
+    }
+    // A program with an error produces no C, and brickc fails like any other
+    // compiler; the diagnostic itself was already printed.
+    if c.failed != 0 {
+        exit(1)
+    }
     var s = renderProgram(c, r.top)
 
     if output == "-" {
