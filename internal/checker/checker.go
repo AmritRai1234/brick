@@ -775,6 +775,28 @@ func (c *Checker) inferCall(ex *ast.CallExpr) ast.Type {
 		}
 		return intT
 	}
+	// read_dir(path): the names in a directory, sorted; empty when it cannot
+	// be opened. ("." and ".." are never included.)
+	if id.Name == "read_dir" {
+		if len(ex.Args) != 1 {
+			c.errorf(ex, "read_dir takes exactly 1 argument (a path), got %d", len(ex.Args))
+		}
+		if at := c.infer(ex.Args[0]); !at.Equals(textT) {
+			c.errorf(ex, "read_dir path must be text, got %s", at)
+		}
+		elem := textT
+		return ast.Type{Name: "List", Elem: &elem}
+	}
+	// is_dir(path): whether a path exists and is a directory.
+	if id.Name == "is_dir" {
+		if len(ex.Args) != 1 {
+			c.errorf(ex, "is_dir takes exactly 1 argument (a path), got %d", len(ex.Args))
+		}
+		if at := c.infer(ex.Args[0]); !at.Equals(textT) {
+			c.errorf(ex, "is_dir path must be text, got %s", at)
+		}
+		return boolT
+	}
 	// getenv(name): an environment variable, or "" when it is not set.
 	if id.Name == "getenv" {
 		if len(ex.Args) != 1 {

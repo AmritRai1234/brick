@@ -456,7 +456,7 @@ func (g *Gen) genCall(ex *ast.CallExpr) {
 		return
 	}
 	switch id.Name {
-	case "eprint", "print_bytes", "read_file", "write_file", "args", "List", "Map", "Builder", "to_text", "to_bytes", "bytes", "slice", "exit", "system", "getenv":
+	case "eprint", "print_bytes", "read_file", "write_file", "args", "List", "Map", "Builder", "to_text", "to_bytes", "bytes", "slice", "exit", "system", "getenv", "read_dir", "is_dir":
 		g.errorf("%s is not supported by the native backend yet", id.Name)
 	}
 	if len(ex.Args) > len(argRegs) {

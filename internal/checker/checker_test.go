@@ -456,3 +456,20 @@ func TestGetenvBuiltin(t *testing.T) {
 		}
 	}
 }
+
+func TestReadDirAndIsDirBuiltins(t *testing.T) {
+	if _, err := check(t, `function main() { var xs = read_dir(".") print(xs.len) print(is_dir(".")) }`); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, src := range []string{
+		`function main() { read_dir() }`,
+		`function main() { read_dir(1) }`,
+		`function main() { var b = is_dir() }`,
+		`function main() { var b = is_dir(1) }`,
+		`function main() { var x = read_dir(".") + 1 }`,
+	} {
+		if _, err := check(t, src); err == nil {
+			t.Errorf("want an error for: %s", src)
+		}
+	}
+}

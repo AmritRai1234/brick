@@ -1,0 +1,15 @@
+// read_dir(path) lists a directory, sorted and without "." and ".."; is_dir
+// tells a directory from a file. Both read the filesystem as it is, so this
+// example looks at the small library directory next to it (run it from the
+// repository root).
+function main() {
+    var lib = read_dir("examples/lib")
+    print(lib.len)
+    if lib.len > 0 {
+        print(lib[0])
+    }
+    print(read_dir("examples/no-such-directory").len)
+    print(is_dir("examples/lib"))
+    print(is_dir("examples/hello.brick"))
+    print(is_dir("examples/no-such-directory"))
+}

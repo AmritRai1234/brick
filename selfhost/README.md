@@ -53,11 +53,11 @@ brick run selfhost/brickc.brick examples/hello.brick -o -      # prints to stdou
 brick run selfhost/brickc.brick examples/hello.brick -o hello  # writes hello.c and builds hello
 ```
 
-One gap remains, and it is the driver rather than the compiler: a program that
-declares `extern` functions links against companion C files (`foo.c` or
-`foo.d/*.c`), which needs a directory read Brick does not have. `brickc` does
-not pass them to the C compiler, so `examples/extern.brick` is still built by
-the Go driver.
+A program that declares `extern` functions links against companion C files
+(`foo.c`, or `foo.d/*.c`), and `brickc` resolves those with the same rule the Go
+driver uses — `read_dir` answers "does this exist" and `is_dir` keeps a
+directory named `foo.c` from being passed to the C compiler — so
+`examples/extern.brick` builds end to end with the self-hosted compiler alone.
 
 The two drivers share the emit machinery in `codegen.brick`: `emitter.brick`
 prints to stdout (for the `brick emit` diff), `brickc.brick` writes a file and,
@@ -141,7 +141,7 @@ over both sets.
 | Single compiler (`brickc`) | done — source in, C out; matches `brick emit` on every input and compiles and runs like the Go compiler's |
 | Bootstrap | done — `make bootstrap`: stage 1 (Go-built) compiles `brickc.brick` into stage 2, stage 2 into stage 3; all stages emit identical C and stage 2 = stage 3 |
 | Diagnostics | done — stops at the first error, in the same words as the Go front end, and exits non-zero without emitting C; diffed against `brick errdump` over `testdata/errors/` |
-| Self-driven build | done — `brickc prog.brick -o prog` emits C and runs the C compiler itself (`make selfhost-e2e`, `make bootstrap`); `extern` companion C files are the one gap |
+| Self-driven build | done — `brickc prog.brick -o prog` emits C, resolves `extern` companion C files and runs the C compiler itself (`make selfhost-e2e`, `make bootstrap`) |
 
 ## Diagnostics
 
@@ -182,6 +182,14 @@ not-found cases, and `make diff` checks the interpreter and the binary agree.
 NUL pointer, so `getenv("UNSET").len` is always safe. `brickc` uses it to honour
 `$BRICK_CC` when choosing the C compiler. `examples/env.brick` covers both the
 set and unset cases.
+
+`read_dir(path)` lists a directory: names only, `.` and `..` dropped, sorted
+(the C backend sorts with `qsort`/`strcmp`, the interpreter gets the order from
+`os.ReadDir`, so the two agree), and an empty list when the directory cannot be
+opened. `is_dir(path)` is `stat` + `S_ISDIR`, so a missing path and a plain file
+both answer `false`. `brickc` uses both to find a program's companion C files.
+`examples/readdir.brick` exercises the listing, the missing directory and the
+file-versus-directory cases.
 
 ## Bootstrapping
 

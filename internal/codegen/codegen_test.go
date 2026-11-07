@@ -415,3 +415,21 @@ func TestGetenvCodegen(t *testing.T) {
 		t.Errorf("getenv runtime should be omitted:\n%s", plain)
 	}
 }
+
+func TestReadDirCodegen(t *testing.T) {
+	out := gen(t, `function main() { var xs = read_dir(".") print(xs.len) print(is_dir(".")) }`)
+	for _, want := range []string{
+		"static inline BrickList brick_read_dir(const char *path)",
+		"qsort(list.data, (size_t)list.len, sizeof(name), brick_name_compare);",
+		"static inline bool brick_is_dir(const char *path)",
+		"brick_read_dir(\".\")",
+		"brick_is_dir(\".\")",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q\n%s", want, out)
+		}
+	}
+	if plain := gen(t, `function main() { print(1) }`); strings.Contains(plain, "brick_read_dir") || strings.Contains(plain, "brick_is_dir") {
+		t.Errorf("directory runtime should be omitted:\n%s", plain)
+	}
+}

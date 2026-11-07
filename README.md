@@ -306,8 +306,11 @@ Mapped to the roadmap in the spec (§15):
       -o prog` writes the C and then runs `$BRICK_CC` (or `cc`) on it, so one
       self-hosted command turns Brick source into a working executable, and
       `make bootstrap` checks that the compiler it just built can build itself
-      again *and* link a program that runs. Only `extern` companion C files are
-      left for the Go driver, because listing `foo.d/*.c` needs a directory read.
+      again *and* link a program that runs. With `read_dir` / `is_dir` it also
+      resolves `extern` companion C files (`foo.c`, `foo.d/*.c`) exactly like
+      the Go driver, so `examples/extern.brick` is built by the self-hosted
+      compiler too — for programs in this repository, no Go code is needed
+      anywhere in the chain from source to executable.
 
 ### Semantics enforced by the checker
 
@@ -388,6 +391,9 @@ Brick-written compiler would need.
   between, and get its exit status (`127` when it cannot be started); this is
   what lets a Brick program drive a C compiler
 - `getenv(name)` — an environment variable, `""` when it is not set
+- `read_dir(path)` — the names in a directory, sorted and without `.` / `..`
+  (empty when it cannot be opened), and `is_dir(path)` — whether a path exists
+  and is a directory
 
 With those in place, every box in the audit is ticked: Brick can express a
 lexer, a parser, symbol tables, type checking and a C emitter. The roadmap's
@@ -438,7 +444,8 @@ away:
 | `v0.3.19` | bootstrap: the self-hosted compiler compiles itself (identical C, stage 2 = stage 3) |
 | `v0.3.20` | `exit(status)`; `brick errdump`; self-hosted diagnostics match the Go compiler |
 | `v0.3.21` | `system(argv)`: run a program without a shell and read its exit status |
-| `v0.3.22` | `getenv`; the self-hosted compiler builds and links programs by itself (current) |
+| `v0.3.22` | `getenv`; the self-hosted compiler builds and links programs by itself |
+| `v0.3.23` | `read_dir` / `is_dir`; `brickc` links `extern` companion C files (current) |
 
 ```sh
 git tag                     # list the tags

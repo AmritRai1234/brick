@@ -735,6 +735,26 @@ func (in *interp) evalCall(ex *ast.CallExpr, env *Env) (Value, error) {
 				return nil, &RuntimeError{Msg: "exit status must be int", Line: ex.Line, Col: ex.Col}
 			}
 			return nil, &ExitError{Code: int(code)}
+		case "is_dir":
+			path, err := in.textArg(ex.Args[0], env)
+			if err != nil {
+				return nil, err
+			}
+			info, err := os.Stat(path)
+			return err == nil && info.IsDir(), nil
+		case "read_dir":
+			path, err := in.textArg(ex.Args[0], env)
+			if err != nil {
+				return nil, err
+			}
+			elemT := ast.Type{Name: "text"}
+			names := []Value{}
+			if entries, err := os.ReadDir(path); err == nil {
+				for _, e := range entries {
+					names = append(names, e.Name())
+				}
+			}
+			return &List{Elem: elemT, Items: names}, nil
 		case "getenv":
 			name, err := in.textArg(ex.Args[0], env)
 			if err != nil {

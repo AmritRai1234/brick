@@ -36,6 +36,75 @@ function cName(path: text) -> text {
     return slice(path, 0, dot) + ".c"
 }
 
+// baseName returns the last component of a path: "a/b/c.brick" -> "c.brick".
+function baseName(path: text) -> text {
+    var i = path.len - 1
+    while i >= 0 {
+        if path[i] == '/' {
+            return slice(path, i + 1, path.len)
+        }
+        i = i - 1
+    }
+    return path
+}
+
+// dirName returns everything before the last "/": "a/b/c.brick" -> "a/b".
+function dirName(path: text) -> text {
+    var i = path.len - 1
+    while i >= 0 {
+        if path[i] == '/' {
+            if i == 0 {
+                return "/"
+            }
+            return slice(path, 0, i)
+        }
+        i = i - 1
+    }
+    return ""
+}
+
+// hasName reports whether a directory listing contains a name.
+function hasName(names: List(text), name: text) -> bool {
+    var i = 0
+    while i < names.len {
+        if names[i] == name {
+            return true
+        }
+        i = i + 1
+    }
+    return false
+}
+
+// companionC is the C sources to link with a program, by the same rule the Go
+// driver uses: <stem>.c when it exists and is a file, then <stem>.d/*.c in
+// sorted order. Listing the parent directory answers "does it exist"; is_dir
+// rules out a directory that happens to be named foo.c.
+function companionC(input: text) -> List(text) {
+    var dir = dirName(input)
+    var listDir = dir
+    if listDir.len == 0 {
+        listDir = "."
+    }
+    var cbase = baseName(cName(input))
+    var stemBase = slice(cbase, 0, cbase.len - 2)
+    var out = List(text)
+    if hasName(read_dir(listDir), cbase) {
+        if !is_dir(joinPath(dir, cbase)) {
+            out.push(joinPath(dir, cbase))
+        }
+    }
+    var ddir = joinPath(dir, stemBase + ".d")
+    var names = read_dir(ddir)
+    var i = 0
+    while i < names.len {
+        if endsWith(names[i], ".c") {
+            out.push(joinPath(ddir, names[i]))
+        }
+        i = i + 1
+    }
+    return out
+}
+
 // endsWith reports whether s ends with tail.
 function endsWith(s: text, tail: text) -> bool {
     if tail.len > s.len {
@@ -111,6 +180,12 @@ function main() {
     cmd.push("-Wall")
     cmd.push("-Wno-unused-parameter")
     cmd.push(cfile)
+    var extra = companionC(input)
+    var j = 0
+    while j < extra.len {
+        cmd.push(extra[j])
+        j = j + 1
+    }
     cmd.push("-o")
     cmd.push(output)
     var status = system(cmd)

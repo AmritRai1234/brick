@@ -1,0 +1,3 @@
+function main() {
+    var xs = read_dir(1)
+}

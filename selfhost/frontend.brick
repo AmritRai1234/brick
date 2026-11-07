@@ -1462,6 +1462,28 @@ function inferCall(c: &mut Checker, idx: int) -> text {
         }
         return "int"
     }
+    if nm == "is_dir" {
+        if n.args.len != 1 {
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": is_dir takes exactly 1 argument (a path), got " + to_text(n.args.len))
+            return "bool"
+        }
+        var it = infer(c, n.args[0])
+        if it != "text" {
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": is_dir path must be text, got " + it)
+        }
+        return "bool"
+    }
+    if nm == "read_dir" {
+        if n.args.len != 1 {
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": read_dir takes exactly 1 argument (a path), got " + to_text(n.args.len))
+            return "List(text)"
+        }
+        var rt = infer(c, n.args[0])
+        if rt != "text" {
+            report(c, to_text(n.line) + ":" + to_text(n.col) + ": read_dir path must be text, got " + rt)
+        }
+        return "List(text)"
+    }
     if nm == "getenv" {
         if n.args.len != 1 {
             report(c, to_text(n.line) + ":" + to_text(n.col) + ": getenv takes exactly 1 argument (a name), got " + to_text(n.args.len))

@@ -3,6 +3,7 @@ package interp
 import (
 	"bytes"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 
@@ -327,5 +328,38 @@ func TestGetenvBuiltin(t *testing.T) {
 	}
 	if got := strings.TrimRight(out, "\n"); got != "value\n0" {
 		t.Fatalf("got %q, want \"value\" and 0", got)
+	}
+}
+
+func TestReadDirAndIsDirBuiltins(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"b.txt", "a.txt", "c.txt"} {
+		if err := os.WriteFile(dir+"/"+name, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Mkdir(dir+"/sub", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	src := `function main() {
+    var xs = read_dir("` + dir + `")
+    print(xs.len)
+    var i = 0
+    while i < xs.len {
+        print(xs[i])
+        i = i + 1
+    }
+    print(read_dir("` + dir + `/nope").len)
+    print(is_dir("` + dir + `/sub"))
+    print(is_dir("` + dir + `/a.txt"))
+    print(is_dir("` + dir + `/nope"))
+}`
+	out, err := runInterp(t, src)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := "4\na.txt\nb.txt\nc.txt\nsub\n0\ntrue\nfalse\nfalse"
+	if got := strings.TrimRight(out, "\n"); got != want {
+		t.Fatalf("got %q, want %q", got, want)
 	}
 }

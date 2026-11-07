@@ -12,6 +12,14 @@ function argsRuntimeText() -> text {
     return "/*\n * Command-line arguments, captured by main and exposed as args().\n */\n\nstatic int    brick_saved_argc;\nstatic char **brick_saved_argv;\n\nstatic inline BrickList brick_args(void)\n{\n    BrickList   list;\n    int         i;\n    const char *arg;\n\n    list = brick_list_new(sizeof(const char *));\n    for (i = 0; i < brick_saved_argc; i++) {\n        arg = brick_saved_argv[i];\n        brick_list_push(&list, &arg);\n    }\n    return list;\n}\n\n"
 }
 
+function isDirRuntimeText() -> text {
+    return "/*\n * is_dir(path): true when the path exists and is a directory, false otherwise.\n */\n\n#include <sys/stat.h>\n\nstatic inline bool brick_is_dir(const char *path)\n{\n    struct stat info;\n\n    if (stat(path, &info) != 0) {\n        return false;\n    }\n    return S_ISDIR(info.st_mode);\n}\n\n"
+}
+
+function readDirRuntimeText() -> text {
+    return "/*\n * Directory listings: read_dir(path) returns every name in a directory,\n * sorted, without \".\" and \"..\", or an empty list when it cannot be opened.\n */\n\n#include <dirent.h>\n\nstatic int brick_name_compare(const void *a, const void *b)\n{\n    return strcmp(*(const char *const *)a, *(const char *const *)b);\n}\n\nstatic inline BrickList brick_read_dir(const char *path)\n{\n    BrickList      list;\n    DIR           *dir;\n    struct dirent *entry;\n    const char    *name;\n    char          *copy;\n    size_t         len;\n\n    list = brick_list_new(sizeof(const char *));\n    dir = opendir(path);\n    if (dir == NULL) {\n        return list;\n    }\n    while ((entry = readdir(dir)) != NULL) {\n        if (strcmp(entry->d_name, \".\") == 0 || strcmp(entry->d_name, \"..\") == 0) {\n            continue;\n        }\n        len = strlen(entry->d_name);\n        copy = brick_alloc(len + 1);\n        memcpy(copy, entry->d_name, len + 1);\n        name = copy;\n        brick_list_push(&list, &name);\n    }\n    closedir(dir);\n    if (list.len > 1) {\n        qsort(list.data, (size_t)list.len, sizeof(name), brick_name_compare);\n    }\n    return list;\n}\n\n"
+}
+
 function getenvRuntimeText() -> text {
     return "/*\n * Environment variables: getenv(name) returns \"\" when the name is not set.\n */\n\nstatic inline const char *brick_getenv(const char *name)\n{\n    const char *value = getenv(name);\n\n    return value != NULL ? value : \"\";\n}\n\n"
 }

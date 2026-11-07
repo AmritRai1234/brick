@@ -137,7 +137,6 @@ selfhost-e2e: selfhost
 	if [ $$fail -ne 0 ]; then echo "self-host end-to-end FAILED"; exit 1; fi; \
 	fail=0; \
 	for f in examples/*.brick; do \
-		case "$$f" in *extern*) continue;; esac; \
 		/tmp/brickc "$$f" -o /tmp/brick-self-bin 2>/dev/null || { echo "selfhost-e2e brickc build FAILED: $$f"; fail=1; continue; }; \
 		./bin/brick build "$$f" -o /tmp/brick-go-bin >/dev/null 2>&1 || continue; \
 		if ! diff <(/tmp/brick-self-bin 2>/dev/null) <(/tmp/brick-go-bin 2>/dev/null); then \
