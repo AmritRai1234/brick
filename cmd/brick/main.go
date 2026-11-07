@@ -38,7 +38,7 @@ import (
 	"brick/internal/parser"
 )
 
-const version = "0.3.11"
+const version = "0.3.12"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -79,6 +79,13 @@ func main() {
 		_, _, file, _ := parseArgs(rest)
 		mustCheck(mustLoad(file))
 		fmt.Printf("%s: ok\n", file)
+	case "typedump":
+		// Canonical, order-stable dump of every expression's inferred type.
+		// Used to verify a Brick-written checker against this one.
+		_, _, file, _ := parseArgs(rest)
+		prog := mustLoad(file)
+		ck := mustCheck(prog)
+		fmt.Print(checker.TypeDump(prog, ck))
 	case "asm":
 		_, _, file, _ := parseArgs(rest)
 		prog := mustLoad(file)
@@ -263,6 +270,7 @@ Usage:
   brick emit  <file.brick>             print the generated C
   brick asm   <file.brick>             print the native x86-64 assembly
   brick check <file.brick>             type-check only
+  brick typedump <file.brick>          machine-readable inferred-type dump (self-host checks)
   brick fmt   <file.brick>             reformat in place (--stdout, --check)
   brick lsp                            run the language server (stdio)
   brick interp <file.brick> [args...]  run on the tree-walking interpreter
