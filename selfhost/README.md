@@ -102,21 +102,23 @@ Brick's `text` is a NUL-terminated C string, so it cannot carry an embedded
 `\0`. A string or character literal whose value contains a NUL therefore
 truncates in the Brick lexer (e.g. `"a\0b"` yields `a b` instead of `a NUL b`),
 while the Go lexer keeps all three bytes. Brick programs cannot use such a
-literal at runtime anyway (the same truncation happens in generated code), so
-this only shows up in the token dump.
+literal at runtime as `text` (the same truncation happens in generated code),
+so this only shows up in the token dump.
 
-A byte-exact lexer needs a length-carrying byte-string type in the language
-(`bytes`/`buffer`). That is the first prerequisite for finishing this port
-faithfully and is tracked as the next self-hosting step.
+The language now has a length-carrying byte-string type, `bytes`, which can
+hold NUL and any byte 0..255; the self-hosted front end and code generator
+understand it, and `examples/bytes.brick` exercises it end to end. Switching
+the self-hosted lexer's token literal and source buffer from `text` to `bytes`
+is what remains to make the port byte-exact on sources containing NUL.
 
 ## Status
 
 | Component | Status |
 | --- | --- |
-| Lexer | done — matches `brick tokdump` on all examples |
+| Lexer | done — matches `brick tokdump` on all examples (text sources; NUL gap above) |
 | Parser (+ AST dump) | done — matches `brick ast` on all examples |
 | Checker (+ type dump) | done — matches `brick typedump` on all examples |
-| C emitter | done — matches `brick emit` on all examples |
+| C emitter | done — matches `brick emit` on all examples, including `bytes` |
 | Single compiler (`brickc`) | done — source in, C out; C compiles and runs like the Go compiler's |
 
 ## Building a component by hand

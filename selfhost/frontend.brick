@@ -1248,6 +1248,9 @@ function inferIndex(c: &mut Checker, idx: int) -> text {
     if bt == "text" {
         return "int"
     }
+    if bt == "bytes" {
+        return "int"
+    }
     eprint(to_text(n.line) + ":" + to_text(n.col) + ": cannot index " + bt)
     return ""
 }
@@ -1270,7 +1273,7 @@ function inferField(c: &mut Checker, idx: int) -> text {
     var bt = infer(c, n.e1)
     if n.name == "len" {
         var nm = nameOf(bt)
-        if nm == "List" || nm == "text" || nm == "Map" || nm == "Builder" {
+        if nm == "List" || nm == "text" || nm == "Map" || nm == "Builder" || nm == "bytes" {
             return "int"
         }
     }
@@ -1431,6 +1434,17 @@ function inferCall(c: &mut Checker, idx: int) -> text {
     if nm == "to_text" {
         infer(c, n.args[0])
         return "text"
+    }
+    if nm == "to_bytes" {
+        infer(c, n.args[0])
+        return "bytes"
+    }
+    if nm == "bytes" {
+        var bt = infer(c, n.args[0])
+        if !isList(bt) || listElem(bt) != "int" {
+            eprint(to_text(n.line) + ":" + to_text(n.col) + ": bytes(...) expects a List(int), got " + bt)
+        }
+        return "bytes"
     }
     if nm == "Builder" {
         return "Builder"

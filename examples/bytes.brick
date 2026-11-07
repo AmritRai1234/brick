@@ -1,0 +1,36 @@
+// A byte string carries its own length, so it can hold bytes that text
+// cannot: NUL, newline, anything 0..255. text is a NUL-terminated C string,
+// so to_bytes(text) stops at the first NUL; build arbitrary bytes with
+// bytes(List(int)) instead.
+
+function main() {
+    var codes = List(int)
+    codes.push(104)  // h
+    codes.push(105)  // i
+    codes.push(0)    // NUL -- kept, because bytes carries a length
+    codes.push(116)  // t
+    var b = bytes(codes)
+    print(b.len)     // 4
+    print(b[2])      // 0
+    print(b[3])      // 116
+
+    // Iterating a byte string yields each byte as an int.
+    var sum = 0
+    for c in b {
+        sum = sum + c
+    }
+    print(sum)       // 104+105+0+116 = 325
+
+    // text round-trips through bytes when it has no embedded NUL.
+    var brick = to_bytes("Brick")
+    print(brick.len)         // 5
+    print(to_text(brick))    // Brick
+    print(brick[0])          // 66 ('B')
+
+    var same = bytes(List(int))
+    same = to_bytes("Brick")
+    print(brick == same)     // true
+    print(brick != same)     // false
+
+    print(bytes(List(int)).len)  // 0
+}

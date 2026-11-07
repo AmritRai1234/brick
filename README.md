@@ -189,6 +189,27 @@ function main() {
 }
 ```
 
+Text is a NUL-terminated C string, so it cannot hold a zero byte. A `bytes`
+value carries its own length and can hold any byte 0..255 — the prerequisite
+for a lexer over arbitrary source files:
+
+```brick
+function main() {
+    var codes = List(int)
+    codes.push(104)   // h
+    codes.push(105)   // i
+    codes.push(0)     // NUL is kept, because bytes carries a length
+    var b = bytes(codes)
+    print(b.len)      // 3
+    print(b[2])       // 0
+    print(to_text(to_bytes("hi")))   // hi
+}
+```
+
+`to_bytes(text)` copies a string's bytes up to the first NUL; `bytes(List(int))`
+builds one from byte values; `to_text(bytes)` copies it back. Indexing and
+`for b in ...` yield `int` bytes, and `==` / `!=` compare them byte-wise.
+
 Generates readable C you can read side-by-side with the source (K&R style,
 Clean Code naming, `static` linkage, no hidden state):
 
@@ -262,8 +283,9 @@ Mapped to the roadmap in the spec (§15):
       whole pipeline as one program — lex, parse, resolve imports, check, emit —
       a single self-hosted compiler; `make selfhost-e2e` uses it to compile each
       example, builds the C with the system C compiler, and checks the result
-      runs like the Go compiler's. A length-carrying byte-string type is the
-      next language prerequisite (see `selfhost/README.md`).
+      runs like the Go compiler's. The length-carrying `bytes` type — the
+      prerequisite for a byte-exact lexer over sources containing NUL — now
+      exists and is used by the self-hosted pipeline (see `selfhost/README.md`).
 
 ### Semantics enforced by the checker
 
@@ -329,8 +351,11 @@ Brick-written compiler would need.
   value, so it compares and indexes naturally with `text`
 - reading and writing files (`read_file`, `write_file`), command-line `args()`
 - `import "path"` — pull another file's declarations into the program
-- `Builder()` (`add`, `build`) and `to_text(...)` for `int`, `float` and `bool`
-  — assemble output without quadratic `+`
+- `Builder()` (`add`, `build`) and `to_text(...)` for `int`, `float`, `bool`
+  and `bytes` — assemble output without quadratic `+`
+- `bytes` — a length-carrying byte string that can hold NUL and any byte
+  0..255, built with `bytes(List(int))` or `to_bytes(text)`, read back with
+  `to_text`, `.len`, `b[i]`, `for b in ...` and `==` / `!=`
 - top-level `const` — computed at compile time and inlined
 - `arena { ... }` for bulk allocation
 - `slice(text, start, end) -> text` — extract a byte range of a string
@@ -377,7 +402,8 @@ away:
 | `v0.3.12` | `brick typedump`: canonical inferred-type dump for self-host checks |
 | `v0.3.13` | self-hosted checker + type dump |
 | `v0.3.14` | self-hosted C emitter; shared `frontend.brick` |
-| `v0.3.15` | single self-hosted compiler (`brickc.brick`); shared `codegen.brick` (current) |
+| `v0.3.15` | single self-hosted compiler (`brickc.brick`); shared `codegen.brick` |
+| `v0.3.16` | `bytes`: length-carrying byte strings (current) |
 
 ```sh
 git tag                     # list the tags

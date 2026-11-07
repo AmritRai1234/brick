@@ -375,3 +375,38 @@ function main() { var xs = List(text) add(&mut xs) }`)
 		t.Fatal("expected error pushing int into &mut List(text)")
 	}
 }
+
+func TestBytesType(t *testing.T) {
+	// bytes is its own type; to_bytes / bytes() build it and to_text reads it.
+	_, err := check(t, `
+function main() {
+    var b = to_bytes("hi")
+    print(b.len)
+    print(b[0])
+    var c = bytes(List(int))
+    print(c == b)
+    print(to_text(b))
+    for x in b { print(x) }
+}`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRejectBytesMisuse(t *testing.T) {
+	cases := []string{
+		`function main() { var b = to_bytes(1) }`,                     // needs text
+		`function main() { var b = bytes("hi") }`,                     // needs List(int)
+		`function main() { var b = to_bytes("hi") + b }`,              // no + on bytes
+		`function main() { var b = to_bytes("hi") print(b.len + b) }`, // int + bytes
+		`function main() { var x = to_bytes("hi")[0] + 1 }`,           // index yields int (ok)
+	}
+	for _, src := range cases[:4] {
+		if _, err := check(t, src); err == nil {
+			t.Errorf("want an error for: %s", src)
+		}
+	}
+	if _, err := check(t, cases[4]); err != nil {
+		t.Errorf("indexing bytes should yield int, got: %v", err)
+	}
+}

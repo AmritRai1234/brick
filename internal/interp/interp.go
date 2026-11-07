@@ -7,6 +7,7 @@
 package interp
 
 import (
+	stdbytes "bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -40,6 +41,12 @@ type List struct {
 // Builder is a growable text buffer.
 type Builder struct {
 	Buf []byte
+}
+
+// Bytes is a length-carrying byte string, so it can hold bytes that are not
+// printable (including NUL) without truncation.
+type Bytes struct {
+	Data []byte
 }
 
 // Map is a map value with text keys.
@@ -280,6 +287,15 @@ func (in *interp) execFor(st *ast.ForStmt, env *Env) error {
 	case *List:
 		for _, item := range it.Items {
 			if err := run(item); err != nil {
+				if err == errBreak {
+					return nil
+				}
+				return err
+			}
+		}
+	case *Bytes:
+		for _, c := range it.Data {
+			if err := run(int64(c)); err != nil {
 				if err == errBreak {
 					return nil
 				}
@@ -528,6 +544,9 @@ func equal(a, b Value) bool {
 		return x == b.(bool)
 	case string:
 		return x == b.(string)
+	case *Bytes:
+		y, ok := b.(*Bytes)
+		return ok && stdbytes.Equal(x.Data, y.Data)
 	}
 	return false
 }
@@ -595,6 +614,10 @@ func (in *interp) evalField(ex *ast.FieldExpr, env *Env) (Value, error) {
 		if ex.Field == "len" {
 			return int64(len(v.Buf)), nil
 		}
+	case *Bytes:
+		if ex.Field == "len" {
+			return int64(len(v.Data)), nil
+		}
 	}
 	return nil, &RuntimeError{Msg: "no field " + ex.Field, Line: ex.Line, Col: ex.Col}
 }
@@ -620,6 +643,11 @@ func (in *interp) evalIndex(ex *ast.IndexExpr, env *Env) (Value, error) {
 			return nil, &RuntimeError{Msg: "text index out of range", Line: ex.Line, Col: ex.Col}
 		}
 		return int64(v[i]), nil
+	case *Bytes:
+		if i < 0 || int(i) >= len(v.Data) {
+			return nil, &RuntimeError{Msg: "bytes index out of range", Line: ex.Line, Col: ex.Col}
+		}
+		return int64(v.Data[i]), nil
 	}
 	return nil, &RuntimeError{Msg: "cannot index this value", Line: ex.Line, Col: ex.Col}
 }
@@ -698,6 +726,26 @@ func (in *interp) evalCall(ex *ast.CallExpr, env *Env) (Value, error) {
 			return &Map{Data: map[string]Value{}}, nil
 		case "Builder":
 			return &Builder{}, nil
+		case "bytes":
+			xs, err := in.eval(ex.Args[0], env)
+			if err != nil {
+				return nil, err
+			}
+			l, ok := read(xs).(*List)
+			if !ok {
+				return nil, &RuntimeError{Msg: "bytes(...) expects a List(int)", Line: ex.Line, Col: ex.Col}
+			}
+			data := make([]byte, len(l.Items))
+			for i, it := range l.Items {
+				data[i] = byte(read(it).(int64) & 0xff)
+			}
+			return &Bytes{Data: data}, nil
+		case "to_bytes":
+			s, err := in.textArg(ex.Args[0], env)
+			if err != nil {
+				return nil, err
+			}
+			return &Bytes{Data: []byte(s)}, nil
 		case "to_text":
 			v, err := in.eval(ex.Args[0], env)
 			if err != nil {
@@ -713,6 +761,8 @@ func (in *interp) evalCall(ex *ast.CallExpr, env *Env) (Value, error) {
 					return "true", nil
 				}
 				return "false", nil
+			case *Bytes:
+				return string(x.Data), nil
 			}
 			return nil, &RuntimeError{Msg: "to_text: unsupported type"}
 		}
@@ -952,6 +1002,10 @@ func deepCopy(v Value) Value {
 		buf := make([]byte, len(x.Buf))
 		copy(buf, x.Buf)
 		return &Builder{Buf: buf}
+	case *Bytes:
+		data := make([]byte, len(x.Data))
+		copy(data, x.Data)
+		return &Bytes{Data: data}
 	}
 	return v
 }
@@ -972,6 +1026,8 @@ func zeroValue(t ast.Type) Value {
 		return &Map{Data: map[string]Value{}}
 	case "Builder":
 		return &Builder{}
+	case "bytes":
+		return &Bytes{}
 	}
 	return zeroAny()
 }

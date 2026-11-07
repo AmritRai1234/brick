@@ -75,6 +75,7 @@ var (
 	floatT = ast.Type{Name: "float"}
 	boolT  = ast.Type{Name: "bool"}
 	textT  = ast.Type{Name: "text"}
+	bytesT = ast.Type{Name: "bytes"}
 	voidT  = ast.Type{Name: "void"}
 )
 
@@ -120,7 +121,7 @@ func (c *Checker) resolve(n ast.Node, t ast.Type) ast.Type {
 	}
 	base := t.Name
 	switch base {
-	case "int", "float", "bool", "text", "void":
+	case "int", "float", "bool", "text", "bytes", "void":
 		return t
 	default:
 		if _, ok := c.Structs[base]; ok {
@@ -368,6 +369,8 @@ func (c *Checker) checkStmt(s ast.Stmt) {
 			et = *it.Elem
 		case it.Name == "text" && !it.Ptr:
 			et = intT // iterating text yields each byte as an int
+		case it.Name == "bytes" && !it.Ptr:
+			et = intT // iterating bytes yields each byte as an int
 		default:
 			c.errorf(st, "for can iterate a List or text, got %s", it)
 		}
@@ -798,13 +801,38 @@ func (c *Checker) inferCall(ex *ast.CallExpr) ast.Type {
 	}
 	if id.Name == "to_text" {
 		if len(ex.Args) != 1 {
-			c.errorf(ex, "to_text takes exactly 1 argument (an int, float or bool), got %d", len(ex.Args))
+			c.errorf(ex, "to_text takes exactly 1 argument (an int, float, bool or bytes), got %d", len(ex.Args))
 		}
 		at := c.infer(ex.Args[0])
+		if at.Equals(bytesT) {
+			return textT
+		}
 		if !at.Equals(intT) && !at.Equals(floatT) && !at.Equals(boolT) {
-			c.errorf(ex, "to_text expects an int, float or bool, got %s", at)
+			c.errorf(ex, "to_text expects an int, float, bool or bytes, got %s", at)
 		}
 		return textT
+	}
+	// to_bytes(t): a length-carrying byte string with the bytes of t.
+	if id.Name == "to_bytes" {
+		if len(ex.Args) != 1 {
+			c.errorf(ex, "to_bytes takes exactly 1 argument (text), got %d", len(ex.Args))
+		}
+		if at := c.infer(ex.Args[0]); !at.Equals(textT) {
+			c.errorf(ex, "to_bytes expects text, got %s", at)
+		}
+		return bytesT
+	}
+	// bytes(xs): a byte string built from a List(int) of byte values (0..255).
+	if id.Name == "bytes" {
+		if len(ex.Args) != 1 {
+			c.errorf(ex, "bytes(...) takes exactly one List(int), got %d", len(ex.Args))
+		}
+		at := c.infer(ex.Args[0])
+		want := ast.Type{Name: "List", Elem: &intT}
+		if !at.Equals(want) {
+			c.errorf(ex, "bytes(...) expects a List(int) of byte values, got %s", at)
+		}
+		return bytesT
 	}
 	// Builder(): a growable text buffer, for building output without quadratic +.
 	if id.Name == "Builder" {
@@ -921,7 +949,7 @@ func (c *Checker) inferField(ex *ast.FieldExpr) ast.Type {
 	}
 	bt := c.infer(ex.Base)
 	if ex.Field == "len" {
-		if bt.Name == "List" || bt.Name == "text" || bt.Name == "Map" || bt.Name == "Builder" {
+		if bt.Name == "List" || bt.Name == "text" || bt.Name == "Map" || bt.Name == "Builder" || bt.Name == "bytes" {
 			return intT
 		}
 	}
@@ -946,6 +974,9 @@ func (c *Checker) inferIndex(ex *ast.IndexExpr) ast.Type {
 		return *bt.Elem
 	}
 	if bt.Name == "text" && !bt.Ptr {
+		return intT
+	}
+	if bt.Name == "bytes" && !bt.Ptr {
 		return intT
 	}
 	c.errorf(ex, "cannot index a value of type %s", bt)

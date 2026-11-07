@@ -350,3 +350,28 @@ func TestStringControlBytesEscaped(t *testing.T) {
 		t.Errorf("emitted C contains a raw NUL byte:\n%s", out)
 	}
 }
+
+func TestBytesRuntimeOnlyWhenUsed(t *testing.T) {
+	plain := gen(t, `function main() { print(1) }`)
+	if strings.Contains(plain, "BrickBytes") {
+		t.Error("bytes runtime should not be emitted for a program that does not use bytes")
+	}
+	withBytes := gen(t, `function main() {
+    var b = to_bytes("hi")
+    print(b.len)
+    print(b[0])
+    print(to_text(b))
+    print(b == to_bytes("hi"))
+}`)
+	for _, want := range []string{
+		"typedef struct\n{\n    char   *data;\n    int64_t len;\n} BrickBytes;",
+		"BrickBytes b = brick_to_bytes(\"hi\");",
+		"brick_bytes_at(b, 0)",
+		"brick_bytes_to_text(b)",
+		"brick_bytes_eq(b, brick_to_bytes(\"hi\"))",
+	} {
+		if !strings.Contains(withBytes, want) {
+			t.Errorf("output missing %q\n%s", want, withBytes)
+		}
+	}
+}
