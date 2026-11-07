@@ -338,3 +338,15 @@ func TestToTextCodegenByType(t *testing.T) {
 		}
 	}
 }
+
+func TestStringControlBytesEscaped(t *testing.T) {
+	out := gen(t, `function main() { print("a\0b") }`)
+	// The NUL must be a fixed-width octal escape, never a raw control byte
+	// (a raw NUL in the emitted C literal warns under -Wall).
+	if !strings.Contains(out, `"a\000b"`) {
+		t.Errorf("expected octal-escaped NUL, got:\n%s", out)
+	}
+	if strings.ContainsRune(out, '\x00') {
+		t.Errorf("emitted C contains a raw NUL byte:\n%s", out)
+	}
+}

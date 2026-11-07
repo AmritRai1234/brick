@@ -275,6 +275,25 @@ static inline void *brick_list_at(BrickList *list, int64_t index)
     return (char *)list->data + index * list->elem;
 }
 
+/*
+ * Return the half-open byte range [start, end) of s as fresh text. Bounds are
+ * checked like list indexing; the bytes are copied so the slice is independent.
+ */
+static inline const char *brick_text_slice(const char *s, int64_t start, int64_t end)
+{
+    size_t len;
+    char  *slice;
+
+    len = strlen(s);
+    if (start < 0 || end < start || end > (int64_t)len) {
+        brick_panic_index(start);
+    }
+    slice = brick_alloc((size_t)(end - start) + 1);
+    memcpy(slice, s + start, (size_t)(end - start));
+    slice[end - start] = '\0';
+    return slice;
+}
+
 static inline const char *brick_text_concat(const char *left, const char *right)
 {
     size_t left_len;
@@ -974,6 +993,9 @@ func (g *Generator) expr(e ast.Expr) string {
 				return fmt.Sprintf("brick_read_file(%s)", g.expr(ex.Args[0]))
 			case "write_file":
 				return fmt.Sprintf("brick_write_file(%s, %s)", g.expr(ex.Args[0]), g.expr(ex.Args[1]))
+			case "slice":
+				return fmt.Sprintf("brick_text_slice(%s, %s, %s)",
+					g.expr(ex.Args[0]), g.expr(ex.Args[1]), g.expr(ex.Args[2]))
 			case "args":
 				return "brick_args()"
 			case "List":
@@ -1330,7 +1352,14 @@ func cQuote(s string) string {
 		case '"':
 			b.WriteString("\\\"")
 		default:
-			b.WriteByte(c)
+			// Control bytes (including NUL) have no printable form; emit a
+			// fixed-width octal escape so the literal is portable and does not
+			// contain a raw control byte (which C warns about).
+			if c < 0x20 || c == 0x7f {
+				fmt.Fprintf(&b, "\\%03o", c)
+			} else {
+				b.WriteByte(c)
+			}
 		}
 	}
 	b.WriteByte('"')

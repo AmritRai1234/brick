@@ -669,6 +669,23 @@ func (in *interp) evalCall(ex *ast.CallExpr, env *Env) (Value, error) {
 				return nil, &RuntimeError{Msg: "cannot write " + p, Line: ex.Line, Col: ex.Col}
 			}
 			return nil, nil
+		case "slice":
+			s, err := in.textArg(ex.Args[0], env)
+			if err != nil {
+				return nil, err
+			}
+			start, err := in.intArg(ex.Args[1], env)
+			if err != nil {
+				return nil, err
+			}
+			end, err := in.intArg(ex.Args[2], env)
+			if err != nil {
+				return nil, err
+			}
+			if start < 0 || end < start || end > int64(len(s)) {
+				return nil, &RuntimeError{Msg: "slice out of range", Line: ex.Line, Col: ex.Col}
+			}
+			return s[start:end], nil
 		case "args":
 			items := make([]Value, len(in.args))
 			for i, a := range in.args {
@@ -830,6 +847,19 @@ func (in *interp) textArg(e ast.Expr, env *Env) (string, error) {
 		return "", &RuntimeError{Msg: "expected text", Line: line, Col: col}
 	}
 	return s, nil
+}
+
+func (in *interp) intArg(e ast.Expr, env *Env) (int64, error) {
+	v, err := in.eval(e, env)
+	if err != nil {
+		return 0, err
+	}
+	n, ok := read(v).(int64)
+	if !ok {
+		line, col := e.Pos()
+		return 0, &RuntimeError{Msg: "expected int", Line: line, Col: col}
+	}
+	return n, nil
 }
 
 // ---------- lvalues ----------

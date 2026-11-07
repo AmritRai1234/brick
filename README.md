@@ -253,7 +253,11 @@ Mapped to the roadmap in the spec (§15):
       interpreter (`internal/interp`) runs the same programs as the compiled
       binary; `brick diff` and `make diff` compare their output and report any
       disagreement (§10). It covers the whole core language.
-- [ ] 9. Self-hosting
+- [~] **9. Self-hosting** — in progress. The lexer is now written in Brick
+      (`selfhost/lexer.brick`) and checked byte-for-byte against the Go lexer
+      via `brick tokdump` and `make selfhost` over every example. A length-
+      carrying byte-string type is the next prerequisite for a fully faithful
+      port (see `selfhost/README.md`).
 
 ### Semantics enforced by the checker
 
@@ -323,12 +327,14 @@ Brick-written compiler would need.
   — assemble output without quadratic `+`
 - top-level `const` — computed at compile time and inlined
 - `arena { ... }` for bulk allocation
+- `slice(text, start, end) -> text` — extract a byte range of a string
 - output via `print` / `eprint`
 
 With those in place, every box in the audit is ticked: Brick can express a
 lexer, a parser, symbol tables, type checking and a C emitter. The roadmap's
 last item (self-hosting, §15) is now a matter of writing the compiler in Brick
-itself.
+itself — and that has started: the lexer is the first self-hosted component
+(`selfhost/lexer.brick`), verified against `brick tokdump` by `make selfhost`.
 
 Each feature above landed the same way as the ones before it: implemented across
 the lexer/parser/checker/codegen/interpreter, with an example that `make diff`
@@ -355,7 +361,8 @@ away:
 | `v0.3.6` | `for x in xs { ... }` |
 | `v0.3.7` | character literals (`'a'`) |
 | `v0.3.8` | `to_text` for `float` and `bool` |
-| `v0.3.9` | predictable C linking (`foo.c`, `foo.d/*.c`) (current) |
+| `v0.3.9` | predictable C linking (`foo.c`, `foo.d/*.c`) |
+| `v0.3.10` | self-hosting begins: `slice`, `brick tokdump`, Brick-written lexer (current) |
 
 ```sh
 git tag                     # list the tags

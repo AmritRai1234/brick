@@ -38,7 +38,7 @@ import (
 	"brick/internal/parser"
 )
 
-const version = "0.3.9"
+const version = "0.3.10"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -58,6 +58,19 @@ func main() {
 		src := readFile(file)
 		for _, t := range lexer.New(src).Tokens() {
 			fmt.Printf("%3d:%-3d %-9s %q\n", t.Line, t.Col, t.Type.String(), t.Literal)
+		}
+	case "tokdump":
+		// Canonical, escape-free token dump used to verify a Brick-written
+		// lexer against this one: one token per line, the literal as decimal
+		// byte values so no quoting rules differ between the two languages.
+		_, _, file, _ := parseArgs(rest)
+		src := readFile(file)
+		for _, t := range lexer.New(src).Tokens() {
+			fmt.Printf("%d %d %s %d", t.Line, t.Col, t.Type.String(), len(t.Literal))
+			for i := 0; i < len(t.Literal); i++ {
+				fmt.Printf(" %d", t.Literal[i])
+			}
+			fmt.Println()
 		}
 	case "ast":
 		_, _, file, _ := parseArgs(rest)
@@ -255,6 +268,7 @@ Usage:
   brick interp <file.brick> [args...]  run on the tree-walking interpreter
   brick diff  <file.brick> [args...]   compile+run and interpret, compare output
   brick tokens <file.brick>            print the token stream
+  brick tokdump <file.brick>           machine-readable token dump (self-host checks)
   brick ast   <file.brick>             print the parsed tree
   brick version
 

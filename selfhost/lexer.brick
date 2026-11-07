@@ -1,0 +1,458 @@
+// A Brick-written lexer, the first self-hosted compiler component.
+//
+// It reads a .brick file and prints the same canonical token dump as
+// `brick tokdump` (line, column, kind, then the literal as decimal bytes), so
+// `make selfhost` can diff the two over every example.
+//
+// This is a faithful port of internal/lexer: same scan order, same &mut
+// lookahead quirk, same byte-by-byte scanning.
+//
+// Usage: brick run selfhost/lexer.brick <file.brick>
+
+struct Lexer {
+    src: text,
+    pos: int,
+    readPos: int,
+    ch: int,
+    line: int,
+    col: int,
+}
+
+struct Token {
+    kind: text,
+    lit: text,
+    line: int,
+    col: int,
+}
+
+// ---------- scanning primitives ----------
+
+function readChar(l: &mut Lexer) {
+    if l.readPos >= l.src.len {
+        l.ch = 0
+    } else {
+        l.ch = l.src[l.readPos]
+    }
+    l.pos = l.readPos
+    l.readPos = l.readPos + 1
+    if l.ch == '\n' {
+        l.line = l.line + 1
+        l.col = 0
+    } else {
+        l.col = l.col + 1
+    }
+}
+
+// peekAt(0) is the byte right after ch; offset 1 is two bytes ahead, etc.
+function peekAt(l: &Lexer, offset: int) -> int {
+    var i = l.readPos + offset
+    if i >= l.src.len {
+        return 0
+    }
+    return l.src[i]
+}
+
+function isLetter(c: int) -> bool {
+    if c == '_' {
+        return true
+    }
+    if c >= 'a' && c <= 'z' {
+        return true
+    }
+    if c >= 'A' && c <= 'Z' {
+        return true
+    }
+    return false
+}
+
+function isDigit(c: int) -> bool {
+    return c >= '0' && c <= '9'
+}
+
+function isIdentChar(c: int) -> bool {
+    return isLetter(c) || isDigit(c)
+}
+
+function skipIgnored(l: &mut Lexer) {
+    var done = false
+    while !done {
+        if l.ch == ' ' || l.ch == '\t' || l.ch == '\r' || l.ch == '\n' {
+            readChar(l)
+        } else if l.ch == '/' && peekAt(l, 0) == '/' {
+            while l.ch != '\n' && l.ch != 0 {
+                readChar(l)
+            }
+        } else {
+            done = true
+        }
+    }
+}
+
+function tok(kind: text, lit: text, line: int, col: int) -> Token {
+    return Token{ kind: kind, lit: lit, line: line, col: col }
+}
+
+// ---------- keywords ----------
+
+function isKeyword(lit: text) -> bool {
+    if lit == "var" {
+        return true
+    }
+    if lit == "const" {
+        return true
+    }
+    if lit == "function" {
+        return true
+    }
+    if lit == "if" {
+        return true
+    }
+    if lit == "else" {
+        return true
+    }
+    if lit == "while" {
+        return true
+    }
+    if lit == "for" {
+        return true
+    }
+    if lit == "in" {
+        return true
+    }
+    if lit == "break" {
+        return true
+    }
+    if lit == "continue" {
+        return true
+    }
+    if lit == "return" {
+        return true
+    }
+    if lit == "struct" {
+        return true
+    }
+    if lit == "enum" {
+        return true
+    }
+    if lit == "match" {
+        return true
+    }
+    if lit == "arena" {
+        return true
+    }
+    if lit == "import" {
+        return true
+    }
+    if lit == "extern" {
+        return true
+    }
+    if lit == "true" {
+        return true
+    }
+    if lit == "false" {
+        return true
+    }
+    return false
+}
+
+function lookupIdent(lit: text) -> text {
+    if isKeyword(lit) {
+        return lit
+    }
+    return "IDENT"
+}
+
+// ---------- multi-character tokens ----------
+
+function readIdentifier(l: &mut Lexer) -> text {
+    var start = l.pos
+    while isLetter(l.ch) || isDigit(l.ch) {
+        readChar(l)
+    }
+    return slice(l.src, start, l.pos)
+}
+
+function readNumber(l: &mut Lexer, line: int, col: int) -> Token {
+    var start = l.pos
+    var isFloat = false
+    while isDigit(l.ch) {
+        readChar(l)
+    }
+    if l.ch == '.' && isDigit(peekAt(l, 0)) {
+        isFloat = true
+        readChar(l)
+        while isDigit(l.ch) {
+            readChar(l)
+        }
+    }
+    var kind = "INT"
+    if isFloat {
+        kind = "FLOAT"
+    }
+    return tok(kind, slice(l.src, start, l.pos), line, col)
+}
+
+function readString(l: &mut Lexer, line: int, col: int) -> Token {
+    readChar(l) // consume the opening quote
+    var buf = ""
+    while l.ch != '"' && l.ch != 0 {
+        if l.ch == '\\' {
+            readChar(l)
+            if l.ch == 'n' {
+                buf = buf + "\n"
+            } else if l.ch == 't' {
+                buf = buf + "\t"
+            } else if l.ch == 'r' {
+                buf = buf + "\r"
+            } else if l.ch == '\\' {
+                buf = buf + "\\"
+            } else if l.ch == '"' {
+                buf = buf + "\""
+            } else if l.ch == '0' {
+                buf = buf + "\0"
+            } else {
+                buf = buf + "\\" + slice(l.src, l.pos, l.pos + 1)
+            }
+            readChar(l)
+        } else {
+            buf = buf + slice(l.src, l.pos, l.pos + 1)
+            readChar(l)
+        }
+    }
+    if l.ch != '"' {
+        return tok("ILLEGAL", "unterminated string", line, col)
+    }
+    readChar(l) // consume the closing quote
+    return tok("STRING", buf, line, col)
+}
+
+function readCharLiteral(l: &mut Lexer, line: int, col: int) -> Token {
+    readChar(l) // consume the opening quote
+    if l.ch == 0 || l.ch == '\n' {
+        return tok("ILLEGAL", "unterminated character literal", line, col)
+    }
+    var b = ""
+    if l.ch == '\\' {
+        readChar(l)
+        if l.ch == 'n' {
+            b = "\n"
+        } else if l.ch == 't' {
+            b = "\t"
+        } else if l.ch == 'r' {
+            b = "\r"
+        } else if l.ch == '\\' {
+            b = "\\"
+        } else if l.ch == '\'' {
+            b = "'"
+        } else if l.ch == '"' {
+            b = "\""
+        } else if l.ch == '0' {
+            b = "\0"
+        } else {
+            return tok("ILLEGAL", "unknown escape in character literal", line, col)
+        }
+        readChar(l)
+    } else {
+        b = slice(l.src, l.pos, l.pos + 1)
+        readChar(l)
+    }
+    if l.ch != '\'' {
+        return tok("ILLEGAL", "character literal must hold exactly one byte", line, col)
+    }
+    readChar(l) // consume the closing quote
+    return tok("CHAR", b, line, col)
+}
+
+// ---------- the scanner ----------
+
+function nextToken(l: &mut Lexer) -> Token {
+    skipIgnored(l)
+    var line = l.line
+    var col = l.col
+
+    if l.ch == 0 {
+        return tok("EOF", "", line, col)
+    }
+    if l.ch == '(' {
+        readChar(l)
+        return tok("(", "(", line, col)
+    }
+    if l.ch == ')' {
+        readChar(l)
+        return tok(")", ")", line, col)
+    }
+    if l.ch == '{' {
+        readChar(l)
+        return tok("{", "{", line, col)
+    }
+    if l.ch == '}' {
+        readChar(l)
+        return tok("}", "}", line, col)
+    }
+    if l.ch == '[' {
+        readChar(l)
+        return tok("[", "[", line, col)
+    }
+    if l.ch == ']' {
+        readChar(l)
+        return tok("]", "]", line, col)
+    }
+    if l.ch == ',' {
+        readChar(l)
+        return tok(",", ",", line, col)
+    }
+    if l.ch == ';' {
+        readChar(l)
+        return tok(";", ";", line, col)
+    }
+    if l.ch == '.' {
+        readChar(l)
+        return tok(".", ".", line, col)
+    }
+    if l.ch == ':' {
+        readChar(l)
+        return tok(":", ":", line, col)
+    }
+    if l.ch == '+' {
+        readChar(l)
+        return tok("+", "+", line, col)
+    }
+    if l.ch == '*' {
+        readChar(l)
+        return tok("*", "*", line, col)
+    }
+    if l.ch == '%' {
+        readChar(l)
+        return tok("%", "%", line, col)
+    }
+    if l.ch == '/' {
+        readChar(l)
+        return tok("/", "/", line, col)
+    }
+    if l.ch == '-' {
+        readChar(l)
+        if l.ch == '>' {
+            readChar(l)
+            return tok("->", "->", line, col)
+        }
+        return tok("-", "-", line, col)
+    }
+    if l.ch == '=' {
+        readChar(l)
+        if l.ch == '=' {
+            readChar(l)
+            return tok("==", "==", line, col)
+        }
+        if l.ch == '>' {
+            readChar(l)
+            return tok("=>", "=>", line, col)
+        }
+        return tok("=", "=", line, col)
+    }
+    if l.ch == '!' {
+        readChar(l)
+        if l.ch == '=' {
+            readChar(l)
+            return tok("!=", "!=", line, col)
+        }
+        return tok("!", "!", line, col)
+    }
+    if l.ch == '<' {
+        readChar(l)
+        if l.ch == '=' {
+            readChar(l)
+            return tok("<=", "<=", line, col)
+        }
+        return tok("<", "<", line, col)
+    }
+    if l.ch == '>' {
+        readChar(l)
+        if l.ch == '=' {
+            readChar(l)
+            return tok(">=", ">=", line, col)
+        }
+        return tok(">", ">", line, col)
+    }
+    if l.ch == '|' {
+        readChar(l)
+        if l.ch == '|' {
+            readChar(l)
+            return tok("||", "||", line, col)
+        }
+        return tok("ILLEGAL", "|", line, col)
+    }
+    if l.ch == '&' {
+        readChar(l)
+        if l.ch == '&' {
+            readChar(l)
+            return tok("&&", "&&", line, col)
+        }
+        // &mut, written with no space between & and mut (same lookahead as Go)
+        if l.ch == 'm' && peekAt(l, 0) == 'u' && l.pos + 3 < l.src.len && peekAt(l, 1) == 't' && !isIdentChar(peekAt(l, 2)) {
+            readChar(l)
+            readChar(l)
+            readChar(l)
+            readChar(l)
+            return tok("&mut", "&mut", line, col)
+        }
+        return tok("&", "&", line, col)
+    }
+
+    if isLetter(l.ch) {
+        var lit = readIdentifier(l)
+        return tok(lookupIdent(lit), lit, line, col)
+    }
+    if isDigit(l.ch) {
+        return readNumber(l, line, col)
+    }
+    if l.ch == '"' {
+        return readString(l, line, col)
+    }
+    if l.ch == '\'' {
+        return readCharLiteral(l, line, col)
+    }
+
+    var p = l.pos
+    readChar(l)
+    return tok("ILLEGAL", slice(l.src, p, p + 1), line, col)
+}
+
+// ---------- output: the same dump as `brick tokdump` ----------
+
+function emit(t: Token) {
+    var out = Builder()
+    out.add(to_text(t.line))
+    out.add(" ")
+    out.add(to_text(t.col))
+    out.add(" ")
+    out.add(t.kind)
+    out.add(" ")
+    out.add(to_text(t.lit.len))
+    var i = 0
+    while i < t.lit.len {
+        out.add(" ")
+        out.add(to_text(t.lit[i]))
+        i = i + 1
+    }
+    print(out.build())
+}
+
+function main() {
+    var argv = args()
+    if argv.len < 2 {
+        eprint("usage: brick run selfhost/lexer.brick <file.brick>")
+        return
+    }
+    var src = read_file(argv[1])
+    var l = Lexer{ src: src, pos: 0, readPos: 0, ch: 0, line: 1, col: 0 }
+    readChar(&mut l)
+
+    var done = false
+    while !done {
+        var t = nextToken(&mut l)
+        emit(t)
+        if t.kind == "EOF" {
+            done = true
+        }
+    }
+}

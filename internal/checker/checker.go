@@ -780,6 +780,20 @@ func (c *Checker) inferCall(ex *ast.CallExpr) ast.Type {
 		et := c.resolve(ex, ast.Type{Name: argIdent.Name})
 		return ast.Type{Name: "List", Elem: &et}
 	}
+	if id.Name == "slice" {
+		if len(ex.Args) != 3 {
+			c.errorf(ex, "slice takes 3 arguments (text, start, end), got %d", len(ex.Args))
+		}
+		if at := c.infer(ex.Args[0]); !at.Equals(textT) {
+			c.errorf(ex, "slice source must be text, got %s", at)
+		}
+		for _, i := range []int{1, 2} {
+			if at := c.infer(ex.Args[i]); !at.Equals(intT) {
+				c.errorf(ex, "slice argument %d must be an int, got %s", i+1, at)
+			}
+		}
+		return textT
+	}
 	if id.Name == "to_text" {
 		if len(ex.Args) != 1 {
 			c.errorf(ex, "to_text takes exactly 1 argument (an int, float or bool), got %d", len(ex.Args))

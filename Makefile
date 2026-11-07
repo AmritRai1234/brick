@@ -1,4 +1,4 @@
-.PHONY: build test fmt fmt-check vet clean examples native diff interp backup
+.PHONY: build test fmt fmt-check vet clean examples native diff interp selfhost backup
 
 build:
 	go build -o bin/brick ./cmd/brick
@@ -49,6 +49,19 @@ native: build
 		./bin/brick run --target native "$$f"; \
 		echo; \
 	done
+
+# Self-hosting (§15, roadmap item 9): build the Brick-written lexer and check
+# its token dump is byte-identical to `brick tokdump` over every example.
+selfhost: build
+	@./bin/brick build selfhost/lexer.brick -o /tmp/brick-lex >/dev/null || exit 1
+	@fail=0; \
+	for f in examples/*.brick; do \
+		if ! diff <(/tmp/brick-lex "$$f") <(./bin/brick tokdump "$$f"); then \
+			echo "selfhost MISMATCH: $$f"; fail=1; \
+		fi; \
+	done; \
+	if [ $$fail -ne 0 ]; then echo "self-hosting check FAILED"; exit 1; fi; \
+	echo "selfhost ok: lexer.brick matches brick tokdump on every example"
 
 # Write a single-file backup of the whole repo (all branches and tags) to
 # ../brick-backups. Restore with:  git clone <file>.bundle brick
