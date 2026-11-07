@@ -1,0 +1,4 @@
+// The smallest Brick program.
+function main() {
+    print("Hello, Brick!")
+}

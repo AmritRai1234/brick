@@ -1,0 +1,18 @@
+// Variants that carry data, matched with bindings.
+enum Shape {
+    Circle(float),
+    Rect(float, float)
+}
+
+function area(s: Shape) -> float {
+    match s {
+        Shape.Circle(r) => { return 3.14159 * r * r }
+        Shape.Rect(w, h) => { return w * h }
+    }
+    return 0.0
+}
+
+function main() {
+    print(area(Shape.Circle(1.0)))
+    print(area(Shape.Rect(3.0, 4.0)))
+}

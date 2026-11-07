@@ -1,0 +1,14 @@
+// Functions, variables, a while loop, and integers.
+function square(n: int) -> int {
+    return n * n
+}
+
+function main() {
+    var total = 0
+    var i = 1
+    while i <= 5 {
+        total = total + square(i)
+        i = i + 1
+    }
+    print(total) // 55
+}

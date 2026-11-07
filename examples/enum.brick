@@ -1,0 +1,17 @@
+// Enums and match, the Brick way to choose between variants (§7).
+enum Color { Red, Green, Blue }
+
+function name(c: Color) -> text {
+    match c {
+        Color.Red => return "red"
+        Color.Green => return "green"
+        Color.Blue => return "blue"
+    }
+    return "?"
+}
+
+function main() {
+    print(name(Color.Red))
+    print(name(Color.Green))
+    print(name(Color.Blue))
+}

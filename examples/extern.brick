@@ -1,0 +1,6 @@
+// Calling into C. `triple` is defined in extern.c and linked alongside.
+extern function triple(n: int) -> int
+
+function main() {
+    print(triple(14)) // 42
+}

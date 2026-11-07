@@ -1,0 +1,21 @@
+// Errors as values (§7): a function that can fail returns a Result, and the
+// caller must handle both outcomes. No exceptions.
+enum Result { Ok(int), Err(text) }
+
+function divide(a: int, b: int) -> Result {
+    if b == 0 {
+        return Result.Err("division by zero")
+    }
+    return Result.Ok(a / b)
+}
+
+function main() {
+    match divide(10, 2) {
+        Result.Ok(n) => print(n)
+        Result.Err(msg) => print(msg)
+    }
+    match divide(1, 0) {
+        Result.Ok(n) => print(n)
+        Result.Err(msg) => print(msg)
+    }
+}

@@ -1,0 +1,661 @@
+// Package checker performs semantic analysis: it builds symbol tables, verifies
+// types and records the type of every expression for the code generator.
+package checker
+
+import (
+	"fmt"
+
+	"brick/internal/ast"
+)
+
+// Error is a semantic error with a source position.
+type Error struct {
+	Msg  string
+	Line int
+	Col  int
+}
+
+func (e *Error) Error() string { return fmt.Sprintf("%d:%d: %s", e.Line, e.Col, e.Msg) }
+
+// FuncInfo is a function signature.
+type FuncInfo struct {
+	Params []ast.Param
+	Ret    ast.Type
+	Decl   *ast.FuncDecl
+}
+
+// StructInfo is a struct definition.
+type StructInfo struct {
+	Name   string
+	Fields map[string]ast.Type
+	Order  []string
+	Decl   *ast.StructDecl
+}
+
+// EnumInfo is an enum definition: an ordered list of tagged variants.
+type EnumInfo struct {
+	Name     string
+	Order    []string               // variant names, in declaration order
+	Variants map[string]ast.Variant // by name
+	Decl     *ast.EnumDecl
+}
+
+// Index returns the tag value of a variant (-1 if unknown).
+func (e *EnumInfo) Index(name string) int {
+	for i, v := range e.Order {
+		if v == name {
+			return i
+		}
+	}
+	return -1
+}
+
+// Checker holds program-wide symbols and inferred expression types.
+type Checker struct {
+	Funcs   map[string]*FuncInfo
+	Structs map[string]*StructInfo
+	Enums   map[string]*EnumInfo
+	Types   map[ast.Expr]ast.Type
+
+	scopes []map[string]ast.Type
+	curRet ast.Type
+	inMain bool
+}
+
+var (
+	intT   = ast.Type{Name: "int"}
+	floatT = ast.Type{Name: "float"}
+	boolT  = ast.Type{Name: "bool"}
+	textT  = ast.Type{Name: "text"}
+	voidT  = ast.Type{Name: "void"}
+)
+
+// Check analyses a program, returning a *Error on the first problem found.
+func Check(prog *ast.Program) (c *Checker, err error) {
+	c = &Checker{
+		Funcs:   map[string]*FuncInfo{},
+		Structs: map[string]*StructInfo{},
+		Enums:   map[string]*EnumInfo{},
+		Types:   map[ast.Expr]ast.Type{},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			if ce, ok := r.(*Error); ok {
+				c = nil
+				err = ce
+				return
+			}
+			panic(r)
+		}
+	}()
+	c.collect(prog)
+	c.checkBodies(prog)
+	return c, nil
+}
+
+func (c *Checker) errorf(n ast.Node, format string, args ...any) {
+	line, col := 0, 0
+	if n != nil {
+		line, col = n.Pos()
+	}
+	panic(&Error{Msg: fmt.Sprintf(format, args...), Line: line, Col: col})
+}
+
+func (c *Checker) resolve(n ast.Node, t ast.Type) ast.Type {
+	if t.Name == "List" {
+		if t.Elem == nil {
+			c.errorf(n, "List needs an element type, e.g. List(int)")
+		}
+		et := c.resolve(n, *t.Elem)
+		return ast.Type{Name: "List", Ptr: t.Ptr, Elem: &et}
+	}
+	base := t.Name
+	switch base {
+	case "int", "float", "bool", "text", "void":
+		return t
+	default:
+		if _, ok := c.Structs[base]; ok {
+			return t
+		}
+		if _, ok := c.Enums[base]; ok {
+			return t
+		}
+		c.errorf(n, "unknown type %q", base)
+	}
+	return t
+}
+
+// ---------- pass 1: declarations ----------
+
+func (c *Checker) collect(prog *ast.Program) {
+	// structs first so functions may refer to them
+	for _, s := range prog.Stmts {
+		sd, ok := s.(*ast.StructDecl)
+		if !ok {
+			continue
+		}
+		if _, dup := c.Structs[sd.Name]; dup {
+			c.errorf(sd, "duplicate struct %q", sd.Name)
+		}
+		si := &StructInfo{Name: sd.Name, Fields: map[string]ast.Type{}, Decl: sd}
+		for _, f := range sd.Fields {
+			if _, dup := si.Fields[f.Name]; dup {
+				c.errorf(sd, "struct %q has duplicate field %q", sd.Name, f.Name)
+			}
+			si.Fields[f.Name] = f.Type
+			si.Order = append(si.Order, f.Name)
+		}
+		c.Structs[sd.Name] = si
+	}
+	// enums
+	for _, s := range prog.Stmts {
+		ed, ok := s.(*ast.EnumDecl)
+		if !ok {
+			continue
+		}
+		if _, dup := c.Enums[ed.Name]; dup {
+			c.errorf(ed, "duplicate enum %q", ed.Name)
+		}
+		if _, dup := c.Structs[ed.Name]; dup {
+			c.errorf(ed, "name %q is already a struct", ed.Name)
+		}
+		ei := &EnumInfo{Name: ed.Name, Variants: map[string]ast.Variant{}, Decl: ed}
+		for _, v := range ed.Variants {
+			if _, dup := ei.Variants[v.Name]; dup {
+				c.errorf(ed, "enum %q has duplicate variant %q", ed.Name, v.Name)
+			}
+			ei.Variants[v.Name] = v
+			ei.Order = append(ei.Order, v.Name)
+		}
+		c.Enums[ed.Name] = ei
+	}
+	// validate struct field and enum payload types now that all names are known
+	for _, si := range c.Structs {
+		for _, f := range si.Decl.Fields {
+			c.resolve(si.Decl, f.Type)
+		}
+	}
+	for _, ei := range c.Enums {
+		for _, v := range ei.Decl.Variants {
+			for _, ft := range v.Fields {
+				c.resolve(ei.Decl, ft)
+			}
+		}
+	}
+	// functions
+	for _, s := range prog.Stmts {
+		fd, ok := s.(*ast.FuncDecl)
+		if !ok {
+			continue
+		}
+		if _, dup := c.Funcs[fd.Name]; dup {
+			c.errorf(fd, "duplicate function %q", fd.Name)
+		}
+		for _, p := range fd.Params {
+			c.resolve(fd, p.Type)
+		}
+		if fd.ReturnType.Name != "void" {
+			c.resolve(fd, fd.ReturnType)
+		}
+		c.Funcs[fd.Name] = &FuncInfo{Params: fd.Params, Ret: fd.ReturnType, Decl: fd}
+	}
+	// top level must be declarations only
+	for _, s := range prog.Stmts {
+		switch s.(type) {
+		case *ast.FuncDecl, *ast.StructDecl, *ast.EnumDecl, *ast.ImportStmt:
+		default:
+			c.errorf(s, "only declarations are allowed at the top level (put code inside a function)")
+		}
+	}
+}
+
+// ---------- pass 2: bodies ----------
+
+func (c *Checker) checkBodies(prog *ast.Program) {
+	for _, s := range prog.Stmts {
+		if fd, ok := s.(*ast.FuncDecl); ok && !fd.Extern && fd.Body != nil {
+			c.checkFunc(fd)
+		}
+	}
+}
+
+func (c *Checker) checkFunc(fd *ast.FuncDecl) {
+	c.curRet = fd.ReturnType
+	c.inMain = fd.Name == "main"
+	c.push()
+	for _, p := range fd.Params {
+		c.declare(fd, p.Name, p.Type)
+	}
+	for _, s := range fd.Body.Stmts {
+		c.checkStmt(s)
+	}
+	c.pop()
+	c.inMain = false
+}
+
+// ---------- scopes ----------
+
+func (c *Checker) push() { c.scopes = append(c.scopes, map[string]ast.Type{}) }
+func (c *Checker) pop()  { c.scopes = c.scopes[:len(c.scopes)-1] }
+
+func (c *Checker) declare(n ast.Node, name string, t ast.Type) {
+	if _, dup := c.scopes[len(c.scopes)-1][name]; dup {
+		c.errorf(n, "%q is already declared in this scope", name)
+	}
+	c.scopes[len(c.scopes)-1][name] = t
+}
+
+func (c *Checker) lookupVar(name string) (ast.Type, bool) {
+	for i := len(c.scopes) - 1; i >= 0; i-- {
+		if t, ok := c.scopes[i][name]; ok {
+			return t, true
+		}
+	}
+	return ast.Type{}, false
+}
+
+// ---------- statements ----------
+
+func (c *Checker) checkStmt(s ast.Stmt) {
+	switch st := s.(type) {
+	case *ast.VarStmt:
+		vt := c.infer(st.Value)
+		if st.Type != nil {
+			decl := c.resolve(st, *st.Type)
+			if !decl.Equals(vt) {
+				c.errorf(st, "cannot assign %s to %q (no implicit conversion)", vt, decl)
+			}
+			vt = decl
+		}
+		c.declare(st, st.Name, vt)
+
+	case *ast.AssignStmt:
+		switch st.Target.(type) {
+		case *ast.Ident, *ast.FieldExpr:
+		case *ast.IndexExpr:
+			bt := c.infer(st.Target.(*ast.IndexExpr).Base)
+			if bt.Name != "List" {
+				c.errorf(st, "cannot assign to this index")
+			}
+		default:
+			c.errorf(st, "cannot assign to this expression")
+		}
+		tt := c.infer(st.Target)
+		vt := c.infer(st.Value)
+		if !tt.Equals(vt) {
+			c.errorf(st, "cannot assign %s to %s (no implicit conversion)", vt, tt)
+		}
+
+	case *ast.ReturnStmt:
+		if c.inMain && c.curRet.Name == "void" {
+			// main may return nothing or an int
+		}
+		if st.Value == nil {
+			if c.curRet.Name != "void" {
+				c.errorf(st, "function must return a value of type %s", c.curRet)
+			}
+			return
+		}
+		vt := c.infer(st.Value)
+		if c.curRet.Name == "void" {
+			c.errorf(st, "cannot return a value from a function that returns nothing")
+		}
+		if !vt.Equals(c.curRet) {
+			c.errorf(st, "cannot return %s from a function that returns %s", vt, c.curRet)
+		}
+
+	case *ast.ExprStmt:
+		c.infer(st.X)
+
+	case *ast.BlockStmt:
+		c.push()
+		for _, inner := range st.Stmts {
+			c.checkStmt(inner)
+		}
+		c.pop()
+
+	case *ast.IfStmt:
+		if ct := c.infer(st.Cond); !ct.Equals(boolT) {
+			c.errorf(st, "if condition must be bool, got %s", ct)
+		}
+		c.checkStmt(st.Then)
+		if st.Else != nil {
+			c.checkStmt(st.Else)
+		}
+
+	case *ast.WhileStmt:
+		if ct := c.infer(st.Cond); !ct.Equals(boolT) {
+			c.errorf(st, "while condition must be bool, got %s", ct)
+		}
+		c.checkStmt(st.Body)
+
+	case *ast.MatchStmt:
+		c.checkMatch(st)
+
+	case *ast.FuncDecl, *ast.StructDecl:
+		c.errorf(s, "nested declarations are not allowed")
+
+	default:
+		c.errorf(s, "unhandled statement")
+	}
+}
+
+// ---------- expressions ----------
+
+func (c *Checker) infer(e ast.Expr) ast.Type {
+	t := c.inferInner(e)
+	c.Types[e] = t
+	return t
+}
+
+func (c *Checker) inferInner(e ast.Expr) ast.Type {
+	switch ex := e.(type) {
+	case *ast.IntLit:
+		return intT
+	case *ast.FloatLit:
+		return floatT
+	case *ast.StringLit:
+		return textT
+	case *ast.BoolLit:
+		return boolT
+	case *ast.Ident:
+		if t, ok := c.lookupVar(ex.Name); ok {
+			return t
+		}
+		c.errorf(ex, "undefined name %q", ex.Name)
+	case *ast.UnaryExpr:
+		return c.inferUnary(ex)
+	case *ast.BinaryExpr:
+		return c.inferBinary(ex)
+	case *ast.CallExpr:
+		return c.inferCall(ex)
+	case *ast.FieldExpr:
+		return c.inferField(ex)
+	case *ast.IndexExpr:
+		return c.inferIndex(ex)
+	case *ast.StructLit:
+		return c.inferStructLit(ex)
+	}
+	c.errorf(e, "internal error: unhandled expression")
+	return voidT
+}
+
+func (c *Checker) inferUnary(ex *ast.UnaryExpr) ast.Type {
+	t := c.infer(ex.Operand)
+	switch ex.Op {
+	case "-":
+		if !t.IsNumeric() {
+			c.errorf(ex, "operator '-' needs a number, got %s", t)
+		}
+		return t
+	case "!":
+		if !t.Equals(boolT) {
+			c.errorf(ex, "operator '!' needs bool, got %s", t)
+		}
+		return boolT
+	case "&", "&mut":
+		return ast.Type{Name: t.Name, Ptr: true}
+	}
+	c.errorf(ex, "unknown unary operator %q", ex.Op)
+	return voidT
+}
+
+func (c *Checker) inferBinary(ex *ast.BinaryExpr) ast.Type {
+	l := c.infer(ex.Left)
+	r := c.infer(ex.Right)
+	switch ex.Op {
+	case "+":
+		if l.Equals(textT) && r.Equals(textT) {
+			return textT
+		}
+		if !l.IsNumeric() || !r.IsNumeric() {
+			c.errorf(ex, "operator %q needs numbers or two texts, got %s and %s", ex.Op, l, r)
+		}
+		if !l.Equals(r) {
+			c.errorf(ex, "operator %q needs matching types, got %s and %s", ex.Op, l, r)
+		}
+		return l
+	case "-", "*", "/":
+		if !l.IsNumeric() || !r.IsNumeric() {
+			c.errorf(ex, "operator %q needs numbers, got %s and %s", ex.Op, l, r)
+		}
+		if !l.Equals(r) {
+			c.errorf(ex, "operator %q needs matching types, got %s and %s", ex.Op, l, r)
+		}
+		return l
+	case "%":
+		if !l.Equals(intT) || !r.Equals(intT) {
+			c.errorf(ex, "operator %% needs ints, got %s and %s", l, r)
+		}
+		return intT
+	case "<", "<=", ">", ">=":
+		if !l.IsNumeric() || !l.Equals(r) {
+			c.errorf(ex, "operator %q needs two matching numbers, got %s and %s", ex.Op, l, r)
+		}
+		return boolT
+	case "==", "!=":
+		if !l.Equals(r) {
+			c.errorf(ex, "operator %q needs matching types, got %s and %s", ex.Op, l, r)
+		}
+		return boolT
+	case "&&", "||":
+		if !l.Equals(boolT) || !r.Equals(boolT) {
+			c.errorf(ex, "operator %q needs bools, got %s and %s", ex.Op, l, r)
+		}
+		return boolT
+	}
+	c.errorf(ex, "unknown binary operator %q", ex.Op)
+	return voidT
+}
+
+func (c *Checker) inferCall(ex *ast.CallExpr) ast.Type {
+	// method-style call: list.push(x)
+	if fe, ok := ex.Callee.(*ast.FieldExpr); ok && fe.Field == "push" {
+		bt := c.infer(fe.Base)
+		if bt.Name != "List" || bt.Elem == nil {
+			c.errorf(ex, "push is only available on List values, got %s", bt)
+		}
+		if len(ex.Args) != 1 {
+			c.errorf(ex, "push takes exactly 1 argument, got %d", len(ex.Args))
+		}
+		at := c.infer(ex.Args[0])
+		if !at.Equals(*bt.Elem) {
+			c.errorf(ex, "push: expected %s, got %s", *bt.Elem, at)
+		}
+		return voidT
+	}
+	// enum variant constructor: Enum.Variant(args...)
+	if fe, ok := ex.Callee.(*ast.FieldExpr); ok {
+		if bid, ok := fe.Base.(*ast.Ident); ok {
+			if _, isVar := c.lookupVar(bid.Name); !isVar {
+				if ei, ok := c.Enums[bid.Name]; ok {
+					v, ok := ei.Variants[fe.Field]
+					if !ok {
+						c.errorf(ex, "enum %s has no variant %q", bid.Name, fe.Field)
+					}
+					if len(ex.Args) != len(v.Fields) {
+						c.errorf(ex, "variant %s.%s takes %d argument(s), got %d", bid.Name, fe.Field, len(v.Fields), len(ex.Args))
+					}
+					for i, a := range ex.Args {
+						at := c.infer(a)
+						if !at.Equals(v.Fields[i]) {
+							c.errorf(ex, "argument %d of %s.%s: expected %s, got %s", i+1, bid.Name, fe.Field, v.Fields[i], at)
+						}
+					}
+					return ast.Type{Name: bid.Name}
+				}
+			}
+		}
+	}
+	id, ok := ex.Callee.(*ast.Ident)
+	if !ok {
+		c.errorf(ex, "can only call named functions")
+	}
+	// builtin
+	if id.Name == "print" {
+		if len(ex.Args) != 1 {
+			c.errorf(ex, "print takes exactly 1 argument, got %d", len(ex.Args))
+		}
+		at := c.infer(ex.Args[0])
+		if at.Ptr {
+			c.errorf(ex, "print cannot print a reference")
+		}
+		return voidT
+	}
+	// List(T): an empty growable list of element type T
+	if id.Name == "List" {
+		if len(ex.Args) != 1 {
+			c.errorf(ex, "List(...) takes exactly one type, e.g. List(int)")
+		}
+		argIdent, ok := ex.Args[0].(*ast.Ident)
+		if !ok {
+			c.errorf(ex, "List(...) needs a type name, e.g. List(int)")
+		}
+		et := c.resolve(ex, ast.Type{Name: argIdent.Name})
+		return ast.Type{Name: "List", Elem: &et}
+	}
+	fn, ok := c.Funcs[id.Name]
+	if !ok {
+		c.errorf(ex, "undefined function %q", id.Name)
+	}
+	if len(ex.Args) != len(fn.Params) {
+		c.errorf(ex, "%s takes %d argument(s), got %d", id.Name, len(fn.Params), len(ex.Args))
+	}
+	for i, a := range ex.Args {
+		at := c.infer(a)
+		if !at.Equals(fn.Params[i].Type) {
+			c.errorf(ex, "argument %d of %s: expected %s, got %s", i+1, id.Name, fn.Params[i].Type, at)
+		}
+	}
+	return fn.Ret
+}
+
+func (c *Checker) inferField(ex *ast.FieldExpr) ast.Type {
+	if id, ok := ex.Base.(*ast.Ident); ok {
+		if _, isVar := c.lookupVar(id.Name); !isVar {
+			if ei, ok := c.Enums[id.Name]; ok {
+				v, ok := ei.Variants[ex.Field]
+				if !ok {
+					c.errorf(ex, "enum %s has no variant %q", id.Name, ex.Field)
+				}
+				if len(v.Fields) != 0 {
+					c.errorf(ex, "variant %s.%s needs %d argument(s)", id.Name, ex.Field, len(v.Fields))
+				}
+				return ast.Type{Name: id.Name}
+			}
+			c.errorf(ex, "undefined name %q", id.Name)
+		}
+	}
+	bt := c.infer(ex.Base)
+	if ex.Field == "len" {
+		if bt.Name == "List" || bt.Name == "text" {
+			return intT
+		}
+	}
+	si, ok := c.Structs[bt.Name]
+	if !ok {
+		c.errorf(ex, "cannot access field %q on non-struct type %s", ex.Field, bt)
+	}
+	ft, ok := si.Fields[ex.Field]
+	if !ok {
+		c.errorf(ex, "struct %s has no field %q", bt.Name, ex.Field)
+	}
+	return ft
+}
+
+func (c *Checker) inferIndex(ex *ast.IndexExpr) ast.Type {
+	bt := c.infer(ex.Base)
+	it := c.infer(ex.Index)
+	if !it.Equals(intT) {
+		c.errorf(ex, "index must be int, got %s", it)
+	}
+	if bt.Name == "List" && bt.Elem != nil {
+		return *bt.Elem
+	}
+	if bt.Name == "text" && !bt.Ptr {
+		return intT
+	}
+	c.errorf(ex, "cannot index a value of type %s", bt)
+	return voidT
+}
+
+func (c *Checker) inferStructLit(ex *ast.StructLit) ast.Type {
+	si, ok := c.Structs[ex.Name]
+	if !ok {
+		c.errorf(ex, "unknown struct %q", ex.Name)
+	}
+	seen := map[string]bool{}
+	for _, f := range ex.Fields {
+		ft, ok := si.Fields[f.Name]
+		if !ok {
+			c.errorf(ex, "struct %s has no field %q", ex.Name, f.Name)
+		}
+		if seen[f.Name] {
+			c.errorf(ex, "field %q set twice", f.Name)
+		}
+		seen[f.Name] = true
+		vt := c.infer(f.Value)
+		if !vt.Equals(ft) {
+			c.errorf(ex, "field %s.%s: expected %s, got %s", ex.Name, f.Name, ft, vt)
+		}
+	}
+	for _, name := range si.Order {
+		if !seen[name] {
+			c.errorf(ex, "struct %s: missing field %q", ex.Name, name)
+		}
+	}
+	return ast.Type{Name: ex.Name}
+}
+
+// ---------- match ----------
+
+func (c *Checker) checkMatch(st *ast.MatchStmt) {
+	stT := c.infer(st.Scrutinee)
+	ei, ok := c.Enums[stT.Name]
+	if !ok {
+		c.errorf(st, "match expects an enum, got %s", stT)
+	}
+	covered := map[string]bool{}
+	wild := false
+	for i := range st.Arms {
+		arm := &st.Arms[i]
+		p := arm.Pattern
+		if p.IsWild {
+			if wild {
+				c.errorf(st, "match has more than one wildcard arm")
+			}
+			wild = true
+			c.push()
+			c.checkStmt(arm.Body)
+			c.pop()
+			continue
+		}
+		if p.Enum != stT.Name {
+			c.errorf(&p, "pattern %s.%s does not match enum %s", p.Enum, p.Variant, stT.Name)
+		}
+		v, ok := ei.Variants[p.Variant]
+		if !ok {
+			c.errorf(&p, "enum %s has no variant %q", stT.Name, p.Variant)
+		}
+		if len(p.Binds) != len(v.Fields) {
+			c.errorf(&p, "variant %s.%s binds %d name(s), wants %d", stT.Name, p.Variant, len(p.Binds), len(v.Fields))
+		}
+		if covered[p.Variant] {
+			c.errorf(&p, "variant %s.%s is matched more than once", stT.Name, p.Variant)
+		}
+		covered[p.Variant] = true
+		c.push()
+		for j, b := range p.Binds {
+			c.declare(&p, b, v.Fields[j])
+		}
+		c.checkStmt(arm.Body)
+		c.pop()
+	}
+	if !wild {
+		for _, name := range ei.Order {
+			if !covered[name] {
+				c.errorf(st, "match on %s is missing variant %s.%s", stT.Name, stT.Name, name)
+			}
+		}
+	}
+}

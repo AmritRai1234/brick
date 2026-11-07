@@ -1,0 +1,14 @@
+// Structs and borrowing: move takes a temporary &mut borrow of a Point.
+struct Point { x: int, y: int }
+
+function move(p: &mut Point) {
+    p.x = p.x + 1
+    p.y = p.y + 1
+}
+
+function main() {
+    var a = Point{ x: 1, y: 2 }
+    move(&mut a)
+    print(a.x) // 2
+    print(a.y) // 3
+}

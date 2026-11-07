@@ -1,0 +1,19 @@
+// Growable lists: build, iterate, index, and mutate.
+function main() {
+    var xs = List(int)
+    xs.push(10)
+    xs.push(20)
+    xs.push(30)
+
+    var total = 0
+    var i = 0
+    while i < xs.len {
+        total = total + xs[i]
+        i = i + 1
+    }
+    print(total)     // 60
+    print(xs.len)    // 3
+
+    xs[0] = 100
+    print(xs[0])     // 100
+}

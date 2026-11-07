@@ -1,0 +1,11 @@
+// Text operations a lexer needs: length, indexing (a byte as int), and concat.
+function main() {
+    var s = "hello"
+    print(s.len)          // 5
+    print(s[0])           // 104  ('h')
+
+    var t = s + " world"
+    print(t)              // hello world
+    print(t == "hello world")  // true
+    print(s == "nope")    // false
+}
