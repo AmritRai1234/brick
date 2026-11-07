@@ -1,0 +1,60 @@
+// Three small workloads, one program per language, so the numbers can be
+// compared: an integer loop, a sieve, and building a big text. Usage:
+//   bench int | sieve | text
+function partInt(n: int) -> int {
+    var x = 0
+    var i = 0
+    while i < n {
+        x = (x * 31 + i) % 1000000007
+        i = i + 1
+    }
+    return x
+}
+
+function partSieve(n: int) -> int {
+    var flags = List(bool)
+    var i = 0
+    while i < n {
+        flags.push(true)
+        i = i + 1
+    }
+    var count = 0
+    var j = 2
+    while j < n {
+        if flags[j] {
+            count = count + 1
+            var k = j * 2
+            while k < n {
+                flags[k] = false
+                k = k + j
+            }
+        }
+        j = j + 1
+    }
+    return count
+}
+
+function partText(n: int) -> int {
+    var b = Builder()
+    var i = 0
+    while i < n {
+        b.add(to_text(i))
+        b.add(",")
+        i = i + 1
+    }
+    return b.build().len
+}
+
+function main() {
+    var argv = args()
+    var mode = argv[1]
+    if mode == "int" {
+        print(partInt(200000000))
+    } else if mode == "sieve" {
+        print(partSieve(50000000))
+    } else if mode == "text" {
+        print(partText(1000000))
+    } else {
+        eprint("usage: bench int|sieve|text")
+    }
+}
