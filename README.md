@@ -32,6 +32,7 @@ compiler with `BRICK_CC=clang`.
 | `brick asm <file>` | Print the native x86-64 assembly |
 | `brick check <file>` | Type-check only |
 | `brick fmt <file>` | Reformat in place (`--stdout` prints, `--check` verifies) |
+| `brick lsp` | Run the language server on stdio |
 | `brick interp <file> [args...]` | Run on the tree-walking interpreter |
 | `brick diff <file> [args...]` | Compile+run and interpret, compare output |
 | `brick tokens <file>` | Dump the token stream |
@@ -191,10 +192,12 @@ Mapped to the roadmap in the spec (§15):
 - [x] **Collections and text** — `List(T)` (growable: `push`, indexing, `.len`,
       assign to an index) and text (`.len`, `s[i]` as a byte, `+` concatenation,
       `==` / `!=`). These are the pieces a lexer and parser are built from.
-- [~] **7. Formatter and language server** — the formatter is done
-      (`brick fmt`, `make fmt-check`): it normalizes indentation (four spaces per
-      level) and strips trailing whitespace while preserving every comment. The
-      language server (LSP) is not started.
+- [x] **7. Formatter and language server** — the formatter (`brick fmt`,
+      `make fmt-check`) normalizes indentation (four spaces per level) and strips
+      trailing whitespace while preserving every comment. `brick lsp` runs a
+      small language server over stdio (JSON-RPC, Content-Length framing): it
+      publishes diagnostics from the parser and checker and answers formatting
+      requests, reusing the same front end as the compiler.
 - [x] **8. Interpreter for differential testing** — a slow tree-walking
       interpreter (`internal/interp`) runs the same programs as the compiled
       binary; `brick diff` and `make diff` compare their output and report any
@@ -231,6 +234,7 @@ internal/codegen/   AST -> C
 internal/native/     AST -> x86-64 assembly (Brick's own backend)
 internal/interp/     AST -> values (tree-walking interpreter, for diff testing)
 internal/format/     source -> canonically indented source (the formatter)
+internal/lsp/        language server (JSON-RPC over stdio)
 docs/SPEC.md        the language design notes
 examples/           runnable Brick programs
 ```
@@ -261,11 +265,12 @@ example in `examples/` is a working end-to-end case.
 
 ## Roadmap next steps
 
-Arenas (§6), the differential-testing interpreter (§10) and the formatter (§11)
-are all in place: `make diff` checks the interpreter and compiled binary agree on
-every example, and `make fmt-check` verifies they are canonically formatted. What
-remains from the roadmap (spec §15, §16) is the language server and self-hosting.
-See `docs/SPEC.md` for the full plan.
+Arenas (§6), the differential-testing interpreter (§10), the formatter and the
+language server (§11) are all in place: `make diff` checks the interpreter and
+compiled binary agree on every example, and `make fmt-check` verifies they are
+canonically formatted. The one roadmap item left (spec §15) is self-hosting:
+growing Brick until the compiler can be rewritten in Brick itself. See
+`docs/SPEC.md` for the full plan.
 
 Calling into C now works end to end: the compiler links any `.c` files that sit
 next to the `.brick` source, so `examples/extern.brick` (which calls `triple`

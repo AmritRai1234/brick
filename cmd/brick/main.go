@@ -32,6 +32,7 @@ import (
 	"brick/internal/format"
 	"brick/internal/interp"
 	"brick/internal/lexer"
+	"brick/internal/lsp"
 	"brick/internal/native"
 	"brick/internal/parser"
 )
@@ -82,6 +83,11 @@ func main() {
 		kind, src := lower(file, target, false)
 		_ = kind
 		fmt.Print(src)
+	case "lsp":
+		if err := lsp.Run(os.Stdin, os.Stdout); err != nil {
+			fmt.Fprintf(os.Stderr, "brick: lsp: %v\n", err)
+			os.Exit(1)
+		}
 	case "fmt", "format":
 		os.Exit(fmtCmd(rest))
 	case "interp":
@@ -244,6 +250,7 @@ Usage:
   brick asm   <file.brick>             print the native x86-64 assembly
   brick check <file.brick>             type-check only
   brick fmt   <file.brick>             reformat in place (--stdout, --check)
+  brick lsp                            run the language server (stdio)
   brick interp <file.brick> [args...]  run on the tree-walking interpreter
   brick diff  <file.brick> [args...]   compile+run and interpret, compare output
   brick tokens <file.brick>            print the token stream
