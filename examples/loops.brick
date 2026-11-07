@@ -1,0 +1,24 @@
+// break and continue: leave the innermost loop, or skip to its next iteration.
+function main() {
+    // Sum 1..10 but stop before 6.
+    var total = 0
+    var i = 1
+    while i <= 10 {
+        if i == 6 {
+            break
+        }
+        total = total + i
+        i = i + 1
+    }
+    print(total) // 15
+
+    // Print odd numbers below 10, skipping the even ones.
+    var n = 0
+    while n < 10 {
+        n = n + 1
+        if n % 2 == 0 {
+            continue
+        }
+        print(n) // 1 3 5 7 9
+    }
+}

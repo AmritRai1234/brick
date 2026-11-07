@@ -132,6 +132,16 @@ func (p *Parser) parseStmt() ast.Stmt {
 		return p.parseWhile()
 	case token.ARENA:
 		return p.parseArena()
+	case token.BREAK:
+		t := p.advance()
+		s := &ast.BreakStmt{}
+		ast.SetBase(s, t)
+		return s
+	case token.CONTINUE:
+		t := p.advance()
+		s := &ast.ContinueStmt{}
+		ast.SetBase(s, t)
+		return s
 	case token.RETURN:
 		return p.parseReturn()
 	case token.LBRACE:

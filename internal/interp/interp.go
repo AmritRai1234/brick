@@ -217,9 +217,21 @@ func (in *interp) execStmt(s ast.Stmt, env *Env) error {
 				return nil
 			}
 			if err := in.execStmt(st.Body, env); err != nil {
+				if _, ok := err.(continueSignal); ok {
+					continue
+				}
+				if _, ok := err.(breakSignal); ok {
+					return nil
+				}
 				return err
 			}
 		}
+
+	case *ast.BreakStmt:
+		return breakSignal{}
+
+	case *ast.ContinueStmt:
+		return continueSignal{}
 	case *ast.MatchStmt:
 		return in.execMatch(st, env)
 	case *ast.FuncDecl:
@@ -235,6 +247,15 @@ func (in *interp) execStmt(s ast.Stmt, env *Env) error {
 type returnSignal struct{ v Value }
 
 func (returnSignal) Error() string { return "return" }
+
+// breakSignal and continueSignal unwind to the innermost loop.
+type breakSignal struct{}
+
+func (breakSignal) Error() string { return "break" }
+
+type continueSignal struct{}
+
+func (continueSignal) Error() string { return "continue" }
 
 func (in *interp) execMatch(st *ast.MatchStmt, env *Env) error {
 	v, err := in.eval(st.Scrutinee, env)

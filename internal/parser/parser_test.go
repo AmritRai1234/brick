@@ -135,3 +135,18 @@ func TestParseArena(t *testing.T) {
 		t.Fatalf("arena body not parsed: %+v", ar.Body)
 	}
 }
+
+func TestParseBreakContinue(t *testing.T) {
+	prog, err := Parse(`function main() { while true { break continue } }`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fd := prog.Stmts[0].(*ast.FuncDecl)
+	w := fd.Body.Stmts[0].(*ast.WhileStmt)
+	if _, ok := w.Body.Stmts[0].(*ast.BreakStmt); !ok {
+		t.Fatalf("want BreakStmt, got %T", w.Body.Stmts[0])
+	}
+	if _, ok := w.Body.Stmts[1].(*ast.ContinueStmt); !ok {
+		t.Fatalf("want ContinueStmt, got %T", w.Body.Stmts[1])
+	}
+}

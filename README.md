@@ -178,7 +178,8 @@ Mapped to the roadmap in the spec (§15):
 - [x] **1. Hello world** — reads a `.brick` file, writes equivalent C
 - [x] **2. Variables and math** — `var x = 2 + 3`, `print(x)`; `int`, `float`,
       `bool`, `text`; arithmetic, comparison and logical operators
-- [x] **3. `if` / `else` and `while`**
+- [x] **3. `if` / `else` and `while`**, plus `break` and `continue` (which
+      leave / advance the innermost loop, even from inside a `match`)
 - [x] **4. `function`** — typed parameters and return types, recursion,
       forward references; builtin `print`
 - [x] **5. `struct`, then `extern`** — struct literals, field access, borrowing
@@ -248,6 +249,42 @@ make examples    # build every example and run it
 
 The lexer, parser, checker and code generator each have unit tests, and every
 example in `examples/` is a working end-to-end case.
+
+## Getting to self-hosting
+
+Step 9 in the roadmap (§9, §15) is to rewrite the compiler in Brick. That needs
+the language to be able to express a compiler: symbol tables, source text in and
+C text out, and enough control flow. This is the working audit of what a
+Brick-written compiler would need.
+
+**Ready today**
+
+- structs, `List(T)`, `text`, `int`, `float`, `bool`
+- `enum` + `match` (the natural way to represent tokens and AST nodes)
+- `while` with `break` / `continue`
+- borrowing (`&`, `&mut`) — e.g. `&mut xs[0]` passed into a function
+- structs holding lists, and `xs[i].field = v`
+- reading and writing files (`read_file`, `write_file`), command-line `args()`
+- `arena { ... }` for bulk allocation
+- output via `print` / `eprint`
+
+**Still missing (in rough priority order)**
+
+1. `Map(K, V)` — a symbol table keyed by text; today you would use a `List` and
+   linear scan. (§13 lists map and set.)
+2. `import` — split the compiler across files; the keyword parses but is not
+   resolved yet.
+3. a text builder — `text` is immutable C strings, so building output by `+` is
+   quadratic; a growable buffer is wanted.
+4. top-level `const` (and maybe `var`) — for keyword tables and similar.
+5. `for x in xs { ... }` — pure sugar the spec already describes as a rewrite
+   into `while` (§5).
+6. character literals (`'a'`) — today `s[i]` yields an `int` byte, which works
+   but reads poorly.
+
+Each will land the same way as the features above: implemented across the lexer
+/parser/checker/codegen/interpreter, with an example that `make diff` proves the
+interpreter and the compiled binary agree on.
 
 ## Version control
 

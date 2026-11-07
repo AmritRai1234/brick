@@ -244,3 +244,22 @@ func TestArenaValueDoesNotEscape(t *testing.T) {
 		t.Fatal("want an error: an arena-local name must not escape the block")
 	}
 }
+
+func TestBreakOutsideLoop(t *testing.T) {
+	if _, err := check(t, `function main() { break }`); err == nil {
+		t.Fatal("want an error for break outside a loop")
+	}
+}
+
+func TestContinueOutsideLoop(t *testing.T) {
+	if _, err := check(t, `function main() { continue }`); err == nil {
+		t.Fatal("want an error for continue outside a loop")
+	}
+}
+
+func TestBreakInLoopOK(t *testing.T) {
+	src := `function main() { var i = 0 while true { if i == 1 { break } i = i + 1 } }`
+	if _, err := check(t, src); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

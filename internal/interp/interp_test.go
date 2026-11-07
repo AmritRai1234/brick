@@ -157,3 +157,25 @@ func TestIndexOutOfRange(t *testing.T) {
 		t.Fatal("want a runtime error for out-of-range index")
 	}
 }
+
+func TestBreakContinue(t *testing.T) {
+	src := `
+	function main() {
+		var total = 0
+		var i = 1
+		while i <= 10 {
+			if i == 6 { break }
+			total = total + i
+			i = i + 1
+		}
+		print(total)   // 15
+
+		var n = 0
+		while n < 10 {
+			n = n + 1
+			if n % 2 == 0 { continue }
+			print(n)
+		}
+	}`
+	mustRun(t, src, "15\n1\n3\n5\n7\n9")
+}

@@ -208,14 +208,22 @@ type ArenaStmt struct {
 	Body *BlockStmt
 }
 
-func (*ArenaStmt) stmtNode()  {}
-func (*VarStmt) stmtNode()    {}
-func (*AssignStmt) stmtNode() {}
-func (*ReturnStmt) stmtNode() {}
-func (*ExprStmt) stmtNode()   {}
-func (*BlockStmt) stmtNode()  {}
-func (*IfStmt) stmtNode()     {}
-func (*WhileStmt) stmtNode()  {}
+// BreakStmt leaves the innermost loop.
+type BreakStmt struct{ base }
+
+// ContinueStmt jumps to the next iteration of the innermost loop.
+type ContinueStmt struct{ base }
+
+func (*BreakStmt) stmtNode()    {}
+func (*ContinueStmt) stmtNode() {}
+func (*ArenaStmt) stmtNode()    {}
+func (*VarStmt) stmtNode()      {}
+func (*AssignStmt) stmtNode()   {}
+func (*ReturnStmt) stmtNode()   {}
+func (*ExprStmt) stmtNode()     {}
+func (*BlockStmt) stmtNode()    {}
+func (*IfStmt) stmtNode()       {}
+func (*WhileStmt) stmtNode()    {}
 
 // ---------- Declarations ----------
 
@@ -368,6 +376,12 @@ func dumpStmt(b *strings.Builder, s Stmt, d int) {
 			b.WriteString("else:\n")
 			dumpStmt(b, st.Else, d+2)
 		}
+	case *BreakStmt:
+		indent(b, d)
+		b.WriteString("Break\n")
+	case *ContinueStmt:
+		indent(b, d)
+		b.WriteString("Continue\n")
 	case *ArenaStmt:
 		indent(b, d)
 		b.WriteString("Arena\n")

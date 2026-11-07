@@ -18,8 +18,13 @@ type Generator struct {
 	indent   int
 	tmpN     int
 	arenaN   int
+	labelN   int
 	usesArgs bool
 	inMain   bool
+	// loopStarts/loopEnds are label stacks for the enclosing while loops, so
+	// continue/break can jump to them even from inside a match's C switch.
+	loopStarts []string
+	loopEnds   []string
 }
 
 // Generate returns C source for the program. The checker must have run first
@@ -586,6 +591,35 @@ func (g *Generator) emitStmt(s ast.Stmt) {
 		g.line("}")
 
 	case *ast.WhileStmt:
+		// Emit only the labels this loop actually uses, so gcc does not warn
+		// about an unused label. break jumps to the end, continue to the start
+		// (which re-tests the condition, exactly like a C continue here).
+		hasBreak, hasContinue := blockLoopJumps(st.Body)
+		if !hasBreak && !hasContinue {
+			g.line(fmt.Sprintf("while (%s) {", g.expr(st.Cond)))
+			g.indent++
+			for _, inner := range st.Body.Stmts {
+				g.emitStmt(inner)
+			}
+			g.indent--
+			g.line("}")
+			return
+		}
+		g.labelN++
+		start := fmt.Sprintf("brick_loop_%d", g.labelN)
+		end := fmt.Sprintf("brick_loop_%d_end", g.labelN)
+		startLabel, endLabel := "", ""
+		if hasContinue {
+			startLabel = start
+		}
+		if hasBreak {
+			endLabel = end
+		}
+		g.loopStarts = append(g.loopStarts, startLabel)
+		g.loopEnds = append(g.loopEnds, endLabel)
+		if hasContinue {
+			g.line(start + ":")
+		}
 		g.line(fmt.Sprintf("while (%s) {", g.expr(st.Cond)))
 		g.indent++
 		for _, inner := range st.Body.Stmts {
@@ -593,6 +627,17 @@ func (g *Generator) emitStmt(s ast.Stmt) {
 		}
 		g.indent--
 		g.line("}")
+		if hasBreak {
+			g.line(end + ": ;")
+		}
+		g.loopStarts = g.loopStarts[:len(g.loopStarts)-1]
+		g.loopEnds = g.loopEnds[:len(g.loopEnds)-1]
+
+	case *ast.BreakStmt:
+		g.line("goto " + g.loopEnds[len(g.loopEnds)-1] + ";")
+
+	case *ast.ContinueStmt:
+		g.line("goto " + g.loopStarts[len(g.loopStarts)-1] + ";")
 
 	case *ast.MatchStmt:
 		g.emitMatch(st)
@@ -889,6 +934,46 @@ func programUsesArgs(prog *ast.Program) bool {
 		walkStmt(s)
 	}
 	return found
+}
+
+// blockLoopJumps reports whether a loop body directly uses break and/or
+// continue. It does not descend into nested loops, whose jumps bind to
+// themselves.
+func blockLoopJumps(b *ast.BlockStmt) (hasBreak, hasContinue bool) {
+	for _, s := range b.Stmts {
+		brk, cont := stmtLoopJumps(s)
+		hasBreak = hasBreak || brk
+		hasContinue = hasContinue || cont
+	}
+	return
+}
+
+func stmtLoopJumps(s ast.Stmt) (hasBreak, hasContinue bool) {
+	switch st := s.(type) {
+	case *ast.BreakStmt:
+		return true, false
+	case *ast.ContinueStmt:
+		return false, true
+	case *ast.BlockStmt:
+		return blockLoopJumps(st)
+	case *ast.ArenaStmt:
+		return blockLoopJumps(st.Body)
+	case *ast.IfStmt:
+		brk, cont := blockLoopJumps(st.Then)
+		if st.Else != nil {
+			b2, c2 := stmtLoopJumps(st.Else)
+			brk = brk || b2
+			cont = cont || c2
+		}
+		return brk, cont
+	case *ast.MatchStmt:
+		for _, arm := range st.Arms {
+			brk, cont := stmtLoopJumps(arm.Body)
+			hasBreak = hasBreak || brk
+			hasContinue = hasContinue || cont
+		}
+	}
+	return
 }
 
 func cQuote(s string) string {

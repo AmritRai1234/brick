@@ -198,3 +198,33 @@ func TestArenaCodegen(t *testing.T) {
 		}
 	}
 }
+
+func TestLoopJumpCodegen(t *testing.T) {
+	out := gen(t, `
+	function main() {
+		var i = 0
+		while i < 10 {
+			i = i + 1
+			if i == 3 { continue }
+			if i == 8 { break }
+		}
+	}`)
+	for _, want := range []string{
+		"brick_loop_1:",
+		"while (",
+		"goto brick_loop_1;",     // continue -> loop start
+		"goto brick_loop_1_end;", // break -> loop end
+		"brick_loop_1_end: ;",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q\n%s", want, out)
+		}
+	}
+}
+
+func TestNoLabelsWithoutJumps(t *testing.T) {
+	out := gen(t, `function main() { var i = 0 while i < 3 { i = i + 1 } }`)
+	if strings.Contains(out, "brick_loop_") {
+		t.Errorf("no jump should emit no labels\n%s", out)
+	}
+}

@@ -57,9 +57,10 @@ type Checker struct {
 	Enums   map[string]*EnumInfo
 	Types   map[ast.Expr]ast.Type
 
-	scopes []map[string]ast.Type
-	curRet ast.Type
-	inMain bool
+	scopes    []map[string]ast.Type
+	curRet    ast.Type
+	inMain    bool
+	loopDepth int
 }
 
 var (
@@ -327,7 +328,19 @@ func (c *Checker) checkStmt(s ast.Stmt) {
 		if ct := c.infer(st.Cond); !ct.Equals(boolT) {
 			c.errorf(st, "while condition must be bool, got %s", ct)
 		}
+		c.loopDepth++
 		c.checkStmt(st.Body)
+		c.loopDepth--
+
+	case *ast.BreakStmt:
+		if c.loopDepth == 0 {
+			c.errorf(st, "break outside a loop")
+		}
+
+	case *ast.ContinueStmt:
+		if c.loopDepth == 0 {
+			c.errorf(st, "continue outside a loop")
+		}
 
 	case *ast.ArenaStmt:
 		// An arena is a scope: names declared inside do not escape, and the

@@ -281,6 +281,9 @@ func (g *Gen) genStmt(s ast.Stmt) {
 	case *ast.ArenaStmt:
 		g.errorf("arena is not supported by the native backend yet")
 
+	case *ast.BreakStmt, *ast.ContinueStmt:
+		g.errorf("break/continue are not supported by the native backend yet")
+
 	default:
 		g.errorf("statement %T", s)
 	}

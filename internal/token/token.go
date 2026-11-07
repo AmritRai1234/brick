@@ -21,6 +21,8 @@ const (
 	IF
 	ELSE
 	WHILE
+	BREAK
+	CONTINUE
 	RETURN
 	STRUCT
 	ENUM
@@ -67,7 +69,8 @@ var names = map[Type]string{
 	ILLEGAL: "ILLEGAL", EOF: "EOF", NEWLINE: "NEWLINE",
 	INT: "INT", FLOAT: "FLOAT", STRING: "STRING", IDENT: "IDENT",
 	VAR: "var", FUNCTION: "function", IF: "if", ELSE: "else",
-	WHILE: "while", RETURN: "return", STRUCT: "struct", ENUM: "enum",
+	WHILE: "while", BREAK: "break", CONTINUE: "continue",
+	RETURN: "return", STRUCT: "struct", ENUM: "enum",
 	MATCH: "match", ARENA: "arena", IMPORT: "import", EXTERN: "extern",
 	TRUE: "true", FALSE: "false",
 	ASSIGN: "=", PLUS: "+", MINUS: "-", STAR: "*", SLASH: "/", PERCENT: "%",
@@ -91,6 +94,8 @@ var keywords = map[string]Type{
 	"if":       IF,
 	"else":     ELSE,
 	"while":    WHILE,
+	"break":    BREAK,
+	"continue": CONTINUE,
 	"return":   RETURN,
 	"struct":   STRUCT,
 	"enum":     ENUM,
