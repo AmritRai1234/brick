@@ -39,6 +39,10 @@ compiler with `BRICK_CC=clang`.
 | `brick ast <file>` | Dump the parsed tree |
 | `brick version` | Print the compiler version |
 
+`make bench` runs the same three workloads written in Brick, C, C++ and Rust and
+reports their timings side by side; see `bench/README.md` for the numbers and
+what they show.
+
 Every stage can be inspected — a deliberate design goal ("stage dump flag.
 Print tokens, tree, core form and output so nothing is hidden").
 
@@ -346,6 +350,7 @@ internal/format/     source -> canonically indented source (the formatter)
 internal/lsp/        language server (JSON-RPC over stdio)
 docs/SPEC.md        the language design notes
 examples/           runnable Brick programs
+bench/              the same three workloads in Brick, C, C++ and Rust (make bench)
 ```
 
 ## Testing
