@@ -290,3 +290,30 @@ func TestMapKeyMustBeText(t *testing.T) {
 		t.Fatal("want an error for non-text map keys")
 	}
 }
+
+func TestBuilderAndToText(t *testing.T) {
+	src := `
+	function main() {
+		var b = Builder()
+		b.add("x")
+		b.add(to_text(7))
+		var s = b.build()
+		print(s)
+		print(b.len)
+	}`
+	if _, err := check(t, src); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestBuilderAddNeedsText(t *testing.T) {
+	if _, err := check(t, `function main() { var b = Builder() b.add(3) }`); err == nil {
+		t.Fatal("want an error: add needs text (use to_text)")
+	}
+}
+
+func TestToTextNeedsInt(t *testing.T) {
+	if _, err := check(t, `function main() { print(to_text("x")) }`); err == nil {
+		t.Fatal("want an error: to_text needs an int")
+	}
+}

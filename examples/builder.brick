@@ -1,0 +1,23 @@
+// Builder: assemble text without quadratic concatenation, and to_text to turn
+// numbers into text (there are no implicit conversions in Brick).
+function main() {
+    var out = Builder()
+    var i = 1
+    while i <= 4 {
+        out.add("row ")
+        out.add(to_text(i))
+        out.add(": ")
+        out.add(to_text(i * i))
+        out.add("\n")
+        i = i + 1
+    }
+
+    print(out.build())   // row 1: 1 / row 2: 4 / row 3: 9 / row 4: 16
+    print(out.len)       // 37
+
+    // The same result reads fine with + for small text; the builder is for
+    // building a lot of it (a lexer, a code generator).
+    var line = ""
+    line = line + "n = " + to_text(42)
+    print(line)          // n = 42
+}

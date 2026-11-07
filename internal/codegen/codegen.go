@@ -289,6 +289,14 @@ static inline const char *brick_text_concat(const char *left, const char *right)
     return joined;
 }
 
+static inline const char *brick_int_to_text(int64_t value)
+{
+    char *text = brick_alloc(32);
+
+    snprintf(text, 32, "%lld", (long long)value);
+    return text;
+}
+
 static inline char *brick_read_file(const char *path)
 {
     FILE  *file;
@@ -337,6 +345,60 @@ static inline void brick_write_file(const char *path, const char *contents)
  * Maps (Map(text, V)): a hash table with text keys and inline values, used for
  * symbol tables and the like. Keys are copied; values are stored by bytes.
  */
+
+/*
+ * Text builder (Builder(), from Builder()): a growable buffer for assembling
+ * output without quadratic string concatenation. add() appends; build() returns
+ * the accumulated text. Growth goes through brick_resize, so a builder inside an
+ * arena is freed with it.
+ */
+
+#define BRICK_BUILDER_INITIAL_CAPACITY 32
+#define BRICK_BUILDER_GROWTH_FACTOR    2
+
+typedef struct
+{
+    char   *data;
+    size_t  len;
+    size_t  cap;
+} BrickBuilder;
+
+static inline BrickBuilder brick_builder_new(void)
+{
+    BrickBuilder builder;
+
+    builder.data = NULL;
+    builder.len  = 0;
+    builder.cap  = 0;
+    return builder;
+}
+
+static inline void brick_builder_add(BrickBuilder *builder, const char *text)
+{
+    size_t need = builder->len + strlen(text) + 1;   /* room for the NUL */
+
+    if (need > builder->cap) {
+        size_t cap = builder->cap ? builder->cap * BRICK_BUILDER_GROWTH_FACTOR
+                                  : BRICK_BUILDER_INITIAL_CAPACITY;
+        while (cap < need) {
+            cap *= BRICK_BUILDER_GROWTH_FACTOR;
+        }
+        builder->data = brick_resize(builder->data, builder->cap, cap);
+        builder->cap  = cap;
+    }
+    memcpy(builder->data + builder->len, text, strlen(text));
+    builder->len += strlen(text);
+    builder->data[builder->len] = '\0';
+}
+
+static inline const char *brick_builder_build(BrickBuilder *builder)
+{
+    if (builder->data == NULL) {
+        builder->data = brick_alloc(1);
+        builder->data[0] = '\0';
+    }
+    return builder->data;
+}
 
 #define BRICK_MAP_INITIAL_CAPACITY 8
 
@@ -495,6 +557,8 @@ func (g *Generator) ctype(t ast.Type) string {
 		return "BrickList"
 	case "Map":
 		return "BrickMap"
+	case "Builder":
+		return "BrickBuilder"
 	case "void":
 		return "void"
 	default:
@@ -896,6 +960,10 @@ func (g *Generator) expr(e ast.Expr) string {
 			case "Map":
 				t := g.types[ex]
 				return fmt.Sprintf("brick_map_new(sizeof(%s))", g.ctype(*t.Elem))
+			case "Builder":
+				return "brick_builder_new()"
+			case "to_text":
+				return fmt.Sprintf("brick_int_to_text(%s)", g.expr(ex.Args[0]))
 			}
 		}
 		if fe, ok := ex.Callee.(*ast.FieldExpr); ok {
@@ -911,6 +979,14 @@ func (g *Generator) expr(e ast.Expr) string {
 		}
 		if fe, ok := ex.Callee.(*ast.FieldExpr); ok {
 			bt := g.types[fe.Base]
+			if bt.Name == "Builder" {
+				switch fe.Field {
+				case "add":
+					return fmt.Sprintf("brick_builder_add(&(%s), %s)", g.expr(fe.Base), g.expr(ex.Args[0]))
+				case "build":
+					return fmt.Sprintf("brick_builder_build(&(%s))", g.expr(fe.Base))
+				}
+			}
 			if bt.Name == "Map" && bt.Elem != nil {
 				switch fe.Field {
 				case "set":
@@ -943,6 +1019,9 @@ func (g *Generator) expr(e ast.Expr) string {
 			}
 			if bt.Name == "Map" {
 				return fmt.Sprintf("((%s).len)", g.expr(ex.Base))
+			}
+			if bt.Name == "Builder" {
+				return fmt.Sprintf("((int64_t)(%s).len)", g.expr(ex.Base))
 			}
 			if bt.Name == "text" {
 				return fmt.Sprintf("((int64_t)strlen(%s))", g.expr(ex.Base))

@@ -251,3 +251,25 @@ func TestMapCodegen(t *testing.T) {
 		}
 	}
 }
+
+func TestBuilderAndToTextCodegen(t *testing.T) {
+	out := gen(t, `
+	function main() {
+		var b = Builder()
+		b.add("x")
+		print(b.build())
+		print(b.len)
+		print(to_text(3))
+	}`)
+	for _, want := range []string{
+		"static inline BrickBuilder brick_builder_new(void)",
+		"brick_builder_add(&(b), \"x\")",
+		"brick_builder_build(&(b))",
+		"brick_int_to_text(3)",
+		"((int64_t)(b).len)",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q", want)
+		}
+	}
+}

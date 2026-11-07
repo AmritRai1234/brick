@@ -37,6 +37,11 @@ type List struct {
 	Items []Value
 }
 
+// Builder is a growable text buffer.
+type Builder struct {
+	Buf []byte
+}
+
 // Map is a map value with text keys.
 type Map struct {
 	Key  ast.Type
@@ -536,6 +541,10 @@ func (in *interp) evalField(ex *ast.FieldExpr, env *Env) (Value, error) {
 		if ex.Field == "len" {
 			return int64(len(v.Data)), nil
 		}
+	case *Builder:
+		if ex.Field == "len" {
+			return int64(len(v.Buf)), nil
+		}
 	}
 	return nil, &RuntimeError{Msg: "no field " + ex.Field, Line: ex.Line, Col: ex.Col}
 }
@@ -620,6 +629,14 @@ func (in *interp) evalCall(ex *ast.CallExpr, env *Env) (Value, error) {
 			return &List{}, nil
 		case "Map":
 			return &Map{Data: map[string]Value{}}, nil
+		case "Builder":
+			return &Builder{}, nil
+		case "to_text":
+			v, err := in.eval(ex.Args[0], env)
+			if err != nil {
+				return nil, err
+			}
+			return strconv.FormatInt(read(v).(int64), 10), nil
 		}
 	}
 
@@ -652,6 +669,11 @@ func (in *interp) evalCall(ex *ast.CallExpr, env *Env) (Value, error) {
 				if m, ok := read(*slot).(*Map); ok {
 					if mv, err := in.mapMethod(m, fe.Field, ex, env); err != errNotMapMethod {
 						return mv, err
+					}
+				}
+				if b, ok := read(*slot).(*Builder); ok {
+					if bv, err := in.builderMethod(b, fe.Field, ex, env); err != errNotMapMethod {
+						return bv, err
 					}
 				}
 			}
@@ -717,6 +739,21 @@ func (in *interp) mapMethod(m *Map, field string, ex *ast.CallExpr, env *Env) (V
 		}
 		_, ok := m.Data[k]
 		return ok, nil
+	}
+	return nil, errNotMapMethod
+}
+
+func (in *interp) builderMethod(b *Builder, field string, ex *ast.CallExpr, env *Env) (Value, error) {
+	switch field {
+	case "add":
+		s, err := in.textArg(ex.Args[0], env)
+		if err != nil {
+			return nil, err
+		}
+		b.Buf = append(b.Buf, s...)
+		return nil, nil
+	case "build":
+		return string(b.Buf), nil
 	}
 	return nil, errNotMapMethod
 }
@@ -820,6 +857,10 @@ func deepCopy(v Value) Value {
 			data[k] = deepCopy(v)
 		}
 		return &Map{Key: x.Key, Elem: x.Elem, Data: data}
+	case *Builder:
+		buf := make([]byte, len(x.Buf))
+		copy(buf, x.Buf)
+		return &Builder{Buf: buf}
 	}
 	return v
 }
@@ -838,6 +879,8 @@ func zeroValue(t ast.Type) Value {
 		return &List{Elem: derefElem(t)}
 	case "Map":
 		return &Map{Data: map[string]Value{}}
+	case "Builder":
+		return &Builder{}
 	}
 	return zeroAny()
 }

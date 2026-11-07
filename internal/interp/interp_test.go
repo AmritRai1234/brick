@@ -201,3 +201,20 @@ func TestMapMissingKey(t *testing.T) {
 		t.Fatal("want a runtime error for a missing key")
 	}
 }
+
+func TestBuilder(t *testing.T) {
+	src := `
+	function main() {
+		var b = Builder()
+		var i = 0
+		while i < 4 {
+			b.add(to_text(i * i))
+			b.add(" ")
+			i = i + 1
+		}
+		print(b.build())   // "0 1 4 9 "
+		print(b.len)       // 8
+		print(to_text(42)) // 42
+	}`
+	mustRun(t, src, "0 1 4 9 \n8\n42")
+}

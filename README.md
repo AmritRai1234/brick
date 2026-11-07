@@ -172,6 +172,23 @@ function main() {
 }
 ```
 
+`Builder` assembles text without quadratic `+`, and `to_text` turns a number
+into text (Brick has no implicit conversions):
+
+```brick
+function main() {
+    var out = Builder()
+    var i = 1
+    while i <= 3 {
+        out.add("item ")
+        out.add(to_text(i))
+        out.add("\n")
+        i = i + 1
+    }
+    print(out.build())
+}
+```
+
 Generates readable C you can read side-by-side with the source (K&R style,
 Clean Code naming, `static` linkage, no hidden state):
 
@@ -295,18 +312,19 @@ Brick-written compiler would need.
 - structs holding lists, and `xs[i].field = v`
 - reading and writing files (`read_file`, `write_file`), command-line `args()`
 - `import "path"` — pull another file's declarations into the program
+- `Builder()` (`add`, `build`) and `to_text(int)` — assemble output without
+  quadratic `+`
 - `arena { ... }` for bulk allocation
 - output via `print` / `eprint`
 
 **Still missing (in rough priority order)**
 
-1. a text builder — `text` is immutable C strings, so building output by `+` is
-   quadratic; a growable buffer is wanted.
-2. top-level `const` (and maybe `var`) — for keyword tables and similar.
-3. `for x in xs { ... }` — pure sugar the spec already describes as a rewrite
+1. top-level `const` (and maybe `var`) — for keyword tables and similar.
+2. `for x in xs { ... }` — pure sugar the spec already describes as a rewrite
    into `while` (§5).
-4. character literals (`'a'`) — today `s[i]` yields an `int` byte, which works
+3. character literals (`'a'`) — today `s[i]` yields an `int` byte, which works
    but reads poorly.
+4. `to_text` for `float` and `bool` — today it takes only an `int`.
 
 Each will land the same way as the features above: implemented across the lexer
 /parser/checker/codegen/interpreter, with an example that `make diff` proves the
