@@ -15,6 +15,7 @@ example, so the two can never drift:
 | Parser | `parser.brick` | `brick ast` | `brick run selfhost/parser.brick` |
 | Checker | `checker.brick` | `brick typedump` | `brick run selfhost/checker.brick` |
 | C emitter | `emitter.brick` | `brick emit` | `brick run selfhost/emitter.brick` |
+| Whole compiler | `brickc.brick` | `brick emit` | `brick run selfhost/brickc.brick` |
 
 `brick tokdump` prints a canonical, escape-free token dump — each line is
 `line col KIND nbytes b0 b1 ...`, the literal written as decimal byte values so
@@ -27,13 +28,31 @@ whole program text.
 
 ```sh
 make selfhost        # build every component, run it, diff every example
-make selfhost-e2e    # compile examples with the Brick emitter, run them, compare
+make selfhost-e2e    # compile examples with the single Brick compiler, run them, compare
 ```
 
-All four currently match on **every** `examples/*.brick` file. `make
-selfhost-e2e` goes further: it uses the Brick-written emitter as the compiler,
-builds its C with the system C compiler, runs the binary, and checks the program
-behaves the same as one built by the Go compiler.
+Every component currently matches on **every** `examples/*.brick` file, and on
+the imported library `examples/lib/greet.brick`. `make selfhost-e2e` goes
+further: it uses the single self-hosted compiler (`brickc.brick`) as the
+compiler, builds its C with the system C compiler, runs the binary, and checks
+the program behaves the same as one built by the Go compiler.
+
+## The single compiler
+
+`brickc.brick` is the whole pipeline as one program — lex, parse, resolve
+imports, check, emit — the same stages the separate components verify, wired
+into one command. Brick cannot spawn a process yet, so `brickc` stops at C: it
+writes the generated C to a file (default: the input name with a `.c`
+extension).
+
+```sh
+brick run selfhost/brickc.brick examples/hello.brick           # writes examples/hello.c
+brick run selfhost/brickc.brick examples/hello.brick -o out.c  # writes out.c
+brick run selfhost/brickc.brick examples/hello.brick -o -      # prints to stdout
+```
+
+The two drivers share the emit machinery in `codegen.brick`: `emitter.brick`
+prints to stdout (for the `brick emit` diff), `brickc.brick` writes a file.
 
 ## Layout
 
@@ -47,8 +66,13 @@ behaves the same as one built by the Go compiler.
   resolves imports exactly like `internal/loader`.
 - `checker.brick` — the checker + inferred-type dumper (`import "frontend.brick"`);
   it prints the `brick typedump` fingerprint.
-- `emitter.brick` — the C backend (`import "frontend.brick"` and
-  `"runtime.brick"`); it prints the same C as `brick emit`.
+- `codegen.brick` — the C backend: the emitter struct and every emit function,
+  plus `renderProgram`, which returns the generated C as text. Imported by the
+  two drivers (`emitter.brick`, `brickc.brick`).
+- `emitter.brick` — a driver over `codegen.brick` that prints the C to stdout,
+  matching `brick emit`.
+- `brickc.brick` — the single self-hosted compiler: a driver over
+  `codegen.brick` that writes the C to a file.
 - `runtime.brick` — the C runtime prelude, stored verbatim (as string literals)
   so the emitter emits the exact same bytes the Go compiler does.
 
@@ -93,6 +117,7 @@ faithfully and is tracked as the next self-hosting step.
 | Parser (+ AST dump) | done — matches `brick ast` on all examples |
 | Checker (+ type dump) | done — matches `brick typedump` on all examples |
 | C emitter | done — matches `brick emit` on all examples |
+| Single compiler (`brickc`) | done — source in, C out; C compiles and runs like the Go compiler's |
 
 ## Building a component by hand
 

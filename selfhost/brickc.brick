@@ -1,0 +1,72 @@
+// brickc -- the single self-hosted compiler driver, written in Brick.
+//
+// This is the whole pipeline as one program: it lexes, parses (into the flat
+// node arena), resolves imports, runs the checker, and emits C -- the same
+// stages that were verified separately against `brick tokdump`, `brick ast`,
+// `brick typedump` and `brick emit`, now wired into one command.
+//
+// Brick cannot spawn a process yet, so brickc stops at C: it writes the
+// generated C to a file (default: the input name with a .c extension). Compile
+// that C with cc, exactly as the Go compiler does, to get an executable.
+//
+// Usage:
+//   brick run selfhost/brickc.brick <input.brick>            # write <input>.c
+//   brick run selfhost/brickc.brick <input.brick> -o out.c   # write out.c
+//   brick run selfhost/brickc.brick <input.brick> -o -       # print to stdout
+
+import "frontend.brick"
+import "codegen.brick"
+
+// cName turns "examples/foo.brick" into "examples/foo.c": everything up to the
+// last dot, plus ".c"; if there is no dot, just append ".c".
+function cName(path: text) -> text {
+    var dot = -1
+    var i = 0
+    while i < path.len {
+        if path[i] == '.' {
+            dot = i
+        }
+        i = i + 1
+    }
+    if dot < 0 {
+        return path + ".c"
+    }
+    return slice(path, 0, dot) + ".c"
+}
+
+function main() {
+    var argv = args()
+    if argv.len < 2 {
+        eprint("usage: brick run selfhost/brickc.brick <input.brick> [-o output.c]")
+        return
+    }
+    var input = argv[1]
+    var output = cName(input)
+    var i = 2
+    while i < argv.len {
+        if argv[i] == "-o" {
+            if i + 1 >= argv.len {
+                eprint("brickc: -o needs an argument")
+                return
+            }
+            output = argv[i + 1]
+            i = i + 2
+        } else {
+            eprint("brickc: unknown argument: " + argv[i])
+            return
+        }
+    }
+
+    var c = newChecker()
+    var r = loadFile(&mut c, input, List(text))
+    collect(&mut c, r.top)
+    checkBodies(&mut c, r.top)
+    var s = renderProgram(c, r.top)
+
+    if output == "-" {
+        print(slice(s, 0, s.len - 1))
+    } else {
+        write_file(output, s)
+        eprint("brickc: wrote " + output)
+    }
+}

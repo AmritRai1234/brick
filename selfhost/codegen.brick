@@ -1,0 +1,1023 @@
+// The Brick-written C backend shared by the self-hosted compiler drivers.
+//
+// It imports the shared front end (frontend.brick): tokenize, parse into a flat
+// node arena, resolve imports like the Go loader, and run the same semantic
+// analysis as internal/checker (so every expression node carries its inferred
+// type). From that it generates the same C that `brick emit` prints, and
+// `make selfhost` diffs the two over every example.
+//
+// The runtime prelude is stored verbatim in runtime.brick. Layout, indentation
+// and per-expression text mirror internal/codegen so the output is identical.
+//
+// The driver programs (selfhost/emitter.brick, selfhost/brickc.brick) import
+// this file and call renderProgram; they differ only in what they do with the
+// generated C (print it, or write it to a file).
+
+import "frontend.brick"
+import "runtime.brick"
+
+struct Emitter {
+    c: Checker,
+    top: List(int),
+    out: List(text),
+    indent: int,
+    arenaN: int,
+    labelN: int,
+    tmpN: int,
+    forN: int,
+    inMain: int,
+    usesArgs: int,
+    loopStarts: List(text),
+    loopEnds: List(text),
+}
+
+function newEmitter(c: Checker, top: List(int)) -> Emitter {
+    return Emitter{
+        c: c, top: top, out: List(text), indent: 0,
+        arenaN: 0, labelN: 0, tmpN: 0, forN: 0,
+        inMain: 0, usesArgs: 0,
+        loopStarts: List(text), loopEnds: List(text),
+    }
+}
+
+function pad(n: int) -> text {
+    var b = Builder()
+    var i = 0
+    while i < n * 4 {
+        b.add(" ")
+        i = i + 1
+    }
+    return b.build()
+}
+
+// Append one indented line (its trailing newline included, so the buffer can be
+// concatenated verbatim at the end).
+function line(em: &mut Emitter, s: text) {
+    em.out.push(pad(em.indent) + s + "\n")
+}
+
+// Append raw text with no indentation or added newline.
+function raw(em: &mut Emitter, s: text) {
+    em.out.push(s)
+}
+
+function join(l: List(text), sep: text) -> text {
+    var b = Builder()
+    var i = 0
+    while i < l.len {
+        if i > 0 {
+            b.add(sep)
+        }
+        b.add(l[i])
+        i = i + 1
+    }
+    return b.build()
+}
+
+// ---------- C types ----------
+
+function ctype(t: text) -> text {
+    if t.len >= 1 && t[0] == '&' {
+        return ctype(slice(t, 1, t.len)) + "*"
+    }
+    var base = t
+    var i = 0
+    while i < t.len {
+        if t[i] == '(' {
+            base = slice(t, 0, i)
+            break
+        }
+        i = i + 1
+    }
+    if base == "int" {
+        return "int64_t"
+    }
+    if base == "float" {
+        return "double"
+    }
+    if base == "bool" {
+        return "bool"
+    }
+    if base == "text" {
+        return "const char*"
+    }
+    if base == "List" {
+        return "BrickList"
+    }
+    if base == "Map" {
+        return "BrickMap"
+    }
+    if base == "Builder" {
+        return "BrickBuilder"
+    }
+    if base == "void" {
+        return "void"
+    }
+    return base
+}
+
+// ---------- declarations ----------
+
+function emitForwardStructs(em: &mut Emitter) {
+    var i = 0
+    while i < em.top.len {
+        var n = em.c.nodes[em.top[i]]
+        if n.kind == "Struct" {
+            line(em, "typedef struct " + n.name + " " + n.name + ";")
+        }
+        i = i + 1
+    }
+    i = 0
+    while i < em.top.len {
+        var n = em.c.nodes[em.top[i]]
+        if n.kind == "Enum" {
+            line(em, "typedef struct " + n.name + " " + n.name + ";")
+        }
+        i = i + 1
+    }
+    line(em, "")
+}
+
+function emitEnums(em: &mut Emitter) {
+    var i = 0
+    while i < em.top.len {
+        var n = em.c.nodes[em.top[i]]
+        if n.kind == "Enum" {
+            var consts = List(text)
+            var hasPayload = false
+            var j = 0
+            while j < n.names.len {
+                consts.push(n.name + "_" + n.names[j] + " = " + to_text(j))
+                if n.args[j] > 0 {
+                    hasPayload = true
+                }
+                j = j + 1
+            }
+            line(em, "enum { " + join(consts, ", ") + " };")
+            if !hasPayload {
+                line(em, "struct " + n.name + " { int tag; };")
+                line(em, "")
+            } else {
+                line(em, "struct " + n.name + " {")
+                em.indent = em.indent + 1
+                line(em, "int tag;")
+                line(em, "union {")
+                em.indent = em.indent + 1
+                var base = 0
+                var k = 0
+                while k < n.names.len {
+                    var cnt = n.args[k]
+                    if cnt > 0 {
+                        var fields = List(text)
+                        var m = 0
+                        while m < cnt {
+                            fields.push(ctype(n.types[base + m]) + " payload_" + to_text(m) + ";")
+                            m = m + 1
+                        }
+                        line(em, "struct { " + join(fields, " ") + " } " + n.names[k] + ";")
+                    }
+                    base = base + cnt
+                    k = k + 1
+                }
+                em.indent = em.indent - 1
+                line(em, "} u;")
+                em.indent = em.indent - 1
+                line(em, "};")
+                line(em, "")
+            }
+        }
+        i = i + 1
+    }
+}
+
+function emitStructs(em: &mut Emitter) {
+    var i = 0
+    while i < em.top.len {
+        var n = em.c.nodes[em.top[i]]
+        if n.kind == "Struct" {
+            line(em, "struct " + n.name + " {")
+            em.indent = em.indent + 1
+            var j = 0
+            while j < n.names.len {
+                line(em, ctype(n.types[j]) + " " + n.names[j] + ";")
+                j = j + 1
+            }
+            em.indent = em.indent - 1
+            line(em, "};")
+            line(em, "")
+        }
+        i = i + 1
+    }
+}
+
+function paramList(n: Node) -> text {
+    if n.names.len == 0 {
+        return "void"
+    }
+    var parts = List(text)
+    var i = 0
+    while i < n.names.len {
+        parts.push(ctype(n.types[i]) + " " + n.names[i])
+        i = i + 1
+    }
+    return join(parts, ", ")
+}
+
+function emitPrototypes(em: &mut Emitter) {
+    var i = 0
+    while i < em.top.len {
+        var n = em.c.nodes[em.top[i]]
+        if n.kind == "Func" {
+            if n.flag == 0 && n.name == "main" {
+                i = i + 1
+                continue
+            }
+            var linkage = "static "
+            if n.flag == 1 {
+                linkage = ""
+            }
+            line(em, linkage + ctype(n.t) + " " + n.name + "(" + paramList(n) + ");")
+        }
+        i = i + 1
+    }
+    line(em, "")
+}
+
+function emitBodies(em: &mut Emitter) {
+    var i = 0
+    while i < em.top.len {
+        var n = em.c.nodes[em.top[i]]
+        if n.kind == "Func" && n.flag == 0 && n.e1 >= 0 {
+            emitFunc(em, n)
+            line(em, "")
+        }
+        i = i + 1
+    }
+}
+
+function emitFunc(em: &mut Emitter, n: Node) {
+    var ret = ctype(n.t)
+    var name = n.name
+    var params = paramList(n)
+    var linkage = "static "
+    if name == "main" {
+        ret = "int"
+        linkage = ""
+        if em.usesArgs == 1 {
+            params = "int brick_argc, char **brick_argv"
+        } else {
+            params = "void"
+        }
+    }
+    if name == "main" {
+        em.inMain = 1
+    } else {
+        em.inMain = 0
+    }
+    line(em, linkage + ret + " " + name + "(" + params + ")")
+    line(em, "{")
+    em.indent = em.indent + 1
+    if name == "main" && em.usesArgs == 1 {
+        line(em, "brick_saved_argc = brick_argc;")
+        line(em, "brick_saved_argv = brick_argv;")
+    }
+    var body = em.c.nodes[n.e1]
+    var j = 0
+    while j < body.args.len {
+        emitStmt(em, body.args[j])
+        j = j + 1
+    }
+    if name == "main" && n.t == "void" {
+        line(em, "return 0;")
+    }
+    em.indent = em.indent - 1
+    line(em, "}")
+}
+
+// ---------- statements ----------
+
+function emitStmt(em: &mut Emitter, idx: int) {
+    var n = em.c.nodes[idx]
+    if n.kind == "Var" {
+        var t = n.t
+        if t == "" {
+            t = em.c.nodes[n.e1].ty
+        }
+        line(em, ctype(t) + " " + n.name + " = " + expr(em, n.e1) + ";")
+        return
+    }
+    if n.kind == "Assign" {
+        line(em, expr(em, n.e1) + " = " + expr(em, n.e2) + ";")
+        return
+    }
+    if n.kind == "Arena" {
+        em.arenaN = em.arenaN + 1
+        var name = "brick_arena_" + to_text(em.arenaN)
+        line(em, "/* arena: allocations below are freed together at the closing brace */")
+        line(em, "{")
+        em.indent = em.indent + 1
+        line(em, "BrickArena " + name + ";")
+        line(em, "brick_arena_enter(&" + name + ");")
+        var body = em.c.nodes[n.e1]
+        var i = 0
+        while i < body.args.len {
+            emitStmt(em, body.args[i])
+            i = i + 1
+        }
+        line(em, "brick_arena_leave(&" + name + ");")
+        em.indent = em.indent - 1
+        line(em, "}")
+        return
+    }
+    if n.kind == "Return" {
+        if n.e1 < 0 {
+            if em.inMain == 1 {
+                line(em, "return 0;")
+            } else {
+                line(em, "return;")
+            }
+        } else {
+            line(em, "return " + expr(em, n.e1) + ";")
+        }
+        return
+    }
+    if n.kind == "ExprStmt" {
+        line(em, expr(em, n.e1) + ";")
+        return
+    }
+    if n.kind == "Block" {
+        line(em, "{")
+        em.indent = em.indent + 1
+        var i = 0
+        while i < n.args.len {
+            emitStmt(em, n.args[i])
+            i = i + 1
+        }
+        em.indent = em.indent - 1
+        line(em, "}")
+        return
+    }
+    if n.kind == "If" {
+        line(em, "if (" + expr(em, n.e1) + ") {")
+        em.indent = em.indent + 1
+        var thenB = em.c.nodes[n.e2]
+        var i = 0
+        while i < thenB.args.len {
+            emitStmt(em, thenB.args[i])
+            i = i + 1
+        }
+        em.indent = em.indent - 1
+        if n.e3 >= 0 {
+            line(em, "} else {")
+            em.indent = em.indent + 1
+            emitElse(em, n.e3)
+            em.indent = em.indent - 1
+        }
+        line(em, "}")
+        return
+    }
+    if n.kind == "While" {
+        emitWhile(em, n)
+        return
+    }
+    if n.kind == "For" {
+        emitFor(em, n)
+        return
+    }
+    if n.kind == "Break" {
+        line(em, "goto " + em.loopEnds[em.loopEnds.len - 1] + ";")
+        return
+    }
+    if n.kind == "Continue" {
+        line(em, "goto " + em.loopStarts[em.loopStarts.len - 1] + ";")
+        return
+    }
+    if n.kind == "Match" {
+        emitMatch(em, n)
+        return
+    }
+    line(em, "/* unhandled statement */")
+}
+
+function emitWhile(em: &mut Emitter, n: Node) {
+    var body = em.c.nodes[n.e2]
+    var brk = blockBreak(&em.c, body)
+    var cont = blockContinue(&em.c, body)
+    if !brk && !cont {
+        line(em, "while (" + expr(em, n.e1) + ") {")
+        em.indent = em.indent + 1
+        var i = 0
+        while i < body.args.len {
+            emitStmt(em, body.args[i])
+            i = i + 1
+        }
+        em.indent = em.indent - 1
+        line(em, "}")
+        return
+    }
+    em.labelN = em.labelN + 1
+    var start = "brick_loop_" + to_text(em.labelN)
+    var end = "brick_loop_" + to_text(em.labelN) + "_end"
+    var startLabel = ""
+    var endLabel = ""
+    if cont {
+        startLabel = start
+    }
+    if brk {
+        endLabel = end
+    }
+    em.loopStarts.push(startLabel)
+    em.loopEnds.push(endLabel)
+    if cont {
+        line(em, start + ":")
+    }
+    line(em, "while (" + expr(em, n.e1) + ") {")
+    em.indent = em.indent + 1
+    var i = 0
+    while i < body.args.len {
+        emitStmt(em, body.args[i])
+        i = i + 1
+    }
+    em.indent = em.indent - 1
+    line(em, "}")
+    if brk {
+        line(em, end + ": ;")
+    }
+    em.loopStarts = trimText(em.loopStarts, em.loopStarts.len - 1)
+    em.loopEnds = trimText(em.loopEnds, em.loopEnds.len - 1)
+}
+
+function emitMatch(em: &mut Emitter, n: Node) {
+    var stT = em.c.nodes[n.e1].ty
+    var ei = findEnum(&em.c, nameOf(stT))
+    em.tmpN = em.tmpN + 1
+    var tmp = "scrutinee_" + to_text(em.tmpN)
+    line(em, "{")
+    em.indent = em.indent + 1
+    line(em, ctype(stT) + " " + tmp + " = " + expr(em, n.e1) + ";")
+    line(em, "switch (" + tmp + ".tag) {")
+    em.indent = em.indent + 1
+    var i = 0
+    while i < n.args.len {
+        var arm = em.c.nodes[n.args[i]]
+        if arm.flag == 1 {
+            line(em, "default: {")
+            em.indent = em.indent + 1
+            emitStmt(em, arm.e1)
+            line(em, "break;")
+            em.indent = em.indent - 1
+            line(em, "}")
+        } else {
+            var e = em.c.enums[ei]
+            var idx = indexOf(e.vnames, arm.s)
+            var fields = enumVariantFields(&em.c, ei, arm.s)
+            line(em, "case " + to_text(idx) + ": {")
+            em.indent = em.indent + 1
+            var j = 0
+            while j < arm.names.len {
+                line(em, ctype(fields[j]) + " " + arm.names[j] + " = " + tmp + ".u." + arm.s + ".payload_" + to_text(j) + ";")
+                j = j + 1
+            }
+            emitStmt(em, arm.e1)
+            line(em, "break;")
+            em.indent = em.indent - 1
+            line(em, "}")
+        }
+        i = i + 1
+    }
+    em.indent = em.indent - 1
+    line(em, "}")
+    em.indent = em.indent - 1
+    line(em, "}")
+}
+
+function emitElse(em: &mut Emitter, idx: int) {
+    var n = em.c.nodes[idx]
+    if n.kind == "Block" {
+        var i = 0
+        while i < n.args.len {
+            emitStmt(em, n.args[i])
+            i = i + 1
+        }
+        return
+    }
+    if n.kind == "If" {
+        line(em, "if (" + expr(em, n.e1) + ") {")
+        em.indent = em.indent + 1
+        var thenB = em.c.nodes[n.e2]
+        var i = 0
+        while i < thenB.args.len {
+            emitStmt(em, thenB.args[i])
+            i = i + 1
+        }
+        em.indent = em.indent - 1
+        if n.e3 >= 0 {
+            line(em, "} else {")
+            em.indent = em.indent + 1
+            emitElse(em, n.e3)
+            em.indent = em.indent - 1
+        }
+        line(em, "}")
+        return
+    }
+}
+
+// ---------- expressions ----------
+
+function expr(em: &mut Emitter, idx: int) -> text {
+    var n = em.c.nodes[idx]
+    if n.kind == "Int" {
+        return n.s
+    }
+    if n.kind == "Float" {
+        return n.s
+    }
+    if n.kind == "String" {
+        return cQuote(n.s)
+    }
+    if n.kind == "Bool" {
+        if n.flag == 1 {
+            return "true"
+        }
+        return "false"
+    }
+    if n.kind == "Ident" {
+        var ci = findConst(&em.c, n.name)
+        if ci >= 0 {
+            return expr(em, em.c.consts[ci].lit)
+        }
+        return n.name
+    }
+    if n.kind == "Binary" {
+        if em.c.nodes[n.e1].ty == "text" {
+            if n.name == "+" {
+                return "brick_text_concat(" + expr(em, n.e1) + ", " + expr(em, n.e2) + ")"
+            }
+            if n.name == "==" {
+                return "(strcmp(" + expr(em, n.e1) + ", " + expr(em, n.e2) + ") == 0)"
+            }
+            if n.name == "!=" {
+                return "(strcmp(" + expr(em, n.e1) + ", " + expr(em, n.e2) + ") != 0)"
+            }
+        }
+        return "(" + expr(em, n.e1) + " " + n.name + " " + expr(em, n.e2) + ")"
+    }
+    if n.kind == "Unary" {
+        if n.name == "&" || n.name == "&mut" {
+            return "(&(" + expr(em, n.e1) + "))"
+        }
+        return "(" + n.name + expr(em, n.e1) + ")"
+    }
+    if n.kind == "Call" {
+        return emitCall(em, n)
+    }
+    if n.kind == "Field" {
+        return emitField(em, n)
+    }
+    if n.kind == "Index" {
+        return emitIndex(em, n)
+    }
+    if n.kind == "StructLit" {
+        return emitStructLit(em, n)
+    }
+    return "/* unhandled expr */"
+}
+
+function emitCall(em: &mut Emitter, n: Node) -> text {
+    var callee = em.c.nodes[n.e1]
+    if callee.kind == "Ident" {
+        var nm = callee.name
+        if nm == "print" {
+            return printCall(em, "stdout", n.args[0])
+        }
+        if nm == "eprint" {
+            return printCall(em, "stderr", n.args[0])
+        }
+        if nm == "read_file" {
+            return "brick_read_file(" + expr(em, n.args[0]) + ")"
+        }
+        if nm == "write_file" {
+            return "brick_write_file(" + expr(em, n.args[0]) + ", " + expr(em, n.args[1]) + ")"
+        }
+        if nm == "slice" {
+            return "brick_text_slice(" + expr(em, n.args[0]) + ", " + expr(em, n.args[1]) + ", " + expr(em, n.args[2]) + ")"
+        }
+        if nm == "args" {
+            return "brick_args()"
+        }
+        if nm == "List" {
+            return "brick_list_new(sizeof(" + ctype(listElem(n.ty)) + "))"
+        }
+        if nm == "Map" {
+            return "brick_map_new(sizeof(" + ctype(mapVal(n.ty)) + "))"
+        }
+        if nm == "Builder" {
+            return "brick_builder_new()"
+        }
+        if nm == "to_text" {
+            var a = n.args[0]
+            var av = expr(em, a)
+            var at = em.c.nodes[a].ty
+            if at == "float" {
+                return "brick_float_to_text(" + av + ")"
+            }
+            if at == "bool" {
+                return "brick_bool_to_text(" + av + ")"
+            }
+            return "brick_int_to_text(" + av + ")"
+        }
+    }
+    if callee.kind == "Field" {
+        var base = em.c.nodes[callee.e1]
+        if base.kind == "Ident" {
+            var ei = findEnum(&em.c, base.name)
+            if ei >= 0 {
+                return enumVariant(em, ei, callee.name, n.args)
+            }
+        }
+    }
+    if callee.kind == "Field" && callee.name == "push" {
+        var bt = em.c.nodes[callee.e1].ty
+        return "BRICK_PUSH(" + ctype(listElem(bt)) + ", (" + expr(em, callee.e1) + "), (" + expr(em, n.args[0]) + "))"
+    }
+    if callee.kind == "Field" {
+        var bt2 = em.c.nodes[callee.e1].ty
+        if bt2 == "Builder" {
+            if callee.name == "add" {
+                return "brick_builder_add(&(" + expr(em, callee.e1) + "), " + expr(em, n.args[0]) + ")"
+            }
+            if callee.name == "build" {
+                return "brick_builder_build(&(" + expr(em, callee.e1) + "))"
+            }
+        }
+        if isMap(bt2) {
+            var v = mapVal(bt2)
+            if callee.name == "set" {
+                return "BRICK_MAP_SET(" + ctype(v) + ", (" + expr(em, callee.e1) + "), (" + expr(em, n.args[0]) + "), (" + expr(em, n.args[1]) + "))"
+            }
+            if callee.name == "get" {
+                return "(*(" + ctype(v) + "*)brick_map_get_must(&(" + expr(em, callee.e1) + "), " + expr(em, n.args[0]) + "))"
+            }
+            if callee.name == "has" {
+                return "(brick_map_has(&(" + expr(em, callee.e1) + "), " + expr(em, n.args[0]) + ") != 0)"
+            }
+        }
+    }
+    var args = List(text)
+    var i = 0
+    while i < n.args.len {
+        args.push(expr(em, n.args[i]))
+        i = i + 1
+    }
+    return expr(em, n.e1) + "(" + join(args, ", ") + ")"
+}
+
+function emitField(em: &mut Emitter, n: Node) -> text {
+    var base = em.c.nodes[n.e1]
+    if base.kind == "Ident" {
+        var ei = findEnum(&em.c, base.name)
+        if ei >= 0 {
+            return enumVariant(em, ei, n.name, List(int))
+        }
+    }
+    var bt = em.c.nodes[n.e1].ty
+    if n.name == "len" {
+        if isList(bt) {
+            return "((" + expr(em, n.e1) + ").len)"
+        }
+        if isMap(bt) {
+            return "((" + expr(em, n.e1) + ").len)"
+        }
+        if bt == "Builder" {
+            return "((int64_t)(" + expr(em, n.e1) + ").len)"
+        }
+        if bt == "text" {
+            return "((int64_t)strlen(" + expr(em, n.e1) + "))"
+        }
+    }
+    var op = "."
+    if bt.len >= 1 && bt[0] == '&' {
+        op = "->"
+    }
+    return "(" + expr(em, n.e1) + ")" + op + n.name
+}
+
+function emitIndex(em: &mut Emitter, n: Node) -> text {
+    var bt = em.c.nodes[n.e1].ty
+    if isList(bt) {
+        return "(*(" + ctype(listElem(bt)) + "*)brick_list_at(&(" + expr(em, n.e1) + "), " + expr(em, n.e2) + "))"
+    }
+    if bt == "text" {
+        return "((int64_t)(unsigned char)(" + expr(em, n.e1) + ")[" + expr(em, n.e2) + "])"
+    }
+    return "/* cannot index this */"
+}
+
+function emitStructLit(em: &mut Emitter, n: Node) -> text {
+    if n.args.len == 0 {
+        return "(" + n.name + "){0}"
+    }
+    var parts = List(text)
+    var i = 0
+    while i < n.args.len {
+        parts.push("." + n.names[i] + " = " + expr(em, n.args[i]))
+        i = i + 1
+    }
+    return "(" + n.name + "){ " + join(parts, ", ") + " }"
+}
+
+function enumVariant(em: &mut Emitter, ei: int, variant: text, args: List(int)) -> text {
+    var e = em.c.enums[ei]
+    var idx = indexOf(e.vnames, variant)
+    var fields = enumVariantFields(&em.c, ei, variant)
+    if fields.len == 0 {
+        return "(" + e.name + "){ .tag = " + to_text(idx) + " }"
+    }
+    var inner = List(text)
+    var i = 0
+    while i < args.len {
+        inner.push(".payload_" + to_text(i) + " = " + expr(em, args[i]))
+        i = i + 1
+    }
+    return "(" + e.name + "){ .tag = " + to_text(idx) + ", .u." + variant + " = { " + join(inner, ", ") + " } }"
+}
+
+function printCall(em: &mut Emitter, stream: text, arg: int) -> text {
+    var t = em.c.nodes[arg].ty
+    var a = expr(em, arg)
+    if t == "int" {
+        return wrap(stream, "\"%lld\\n\", (long long)(" + a + ")")
+    }
+    if t == "float" {
+        return wrap(stream, "\"%g\\n\", (double)(" + a + ")")
+    }
+    if t == "bool" {
+        return wrap(stream, "\"%s\\n\", (" + a + ") ? \"true\" : \"false\"")
+    }
+    if t == "text" {
+        return wrap(stream, "\"%s\\n\", (" + a + ")")
+    }
+    return "/* cannot print this type */"
+}
+
+function wrap(stream: text, body: text) -> text {
+    if stream == "stdout" {
+        return "printf(" + body + ")"
+    }
+    return "fprintf(" + stream + ", " + body + ")"
+}
+
+// ---------- loops: which labels are needed ----------
+//
+// A loop body "directly" uses break/continue when the jump is not inside a
+// nested loop (those bind to themselves). Only such loops need labels.
+
+function blockBreak(c: &Checker, b: Node) -> bool {
+    var i = 0
+    while i < b.args.len {
+        if stmtBreak(c, b.args[i]) {
+            return true
+        }
+        i = i + 1
+    }
+    return false
+}
+
+function blockContinue(c: &Checker, b: Node) -> bool {
+    var i = 0
+    while i < b.args.len {
+        if stmtContinue(c, b.args[i]) {
+            return true
+        }
+        i = i + 1
+    }
+    return false
+}
+
+function stmtBreak(c: &Checker, idx: int) -> bool {
+    var n = c.nodes[idx]
+    if n.kind == "Break" {
+        return true
+    }
+    if n.kind == "Block" {
+        return blockBreak(c, n)
+    }
+    if n.kind == "Arena" {
+        return blockBreak(c, c.nodes[n.e1])
+    }
+    if n.kind == "If" {
+        if blockBreak(c, c.nodes[n.e2]) {
+            return true
+        }
+        if n.e3 >= 0 {
+            return stmtBreak(c, n.e3)
+        }
+    }
+    if n.kind == "Match" {
+        var i = 0
+        while i < n.args.len {
+            var arm = c.nodes[n.args[i]]
+            if stmtBreak(c, arm.e1) {
+                return true
+            }
+            i = i + 1
+        }
+    }
+    return false
+}
+
+function stmtContinue(c: &Checker, idx: int) -> bool {
+    var n = c.nodes[idx]
+    if n.kind == "Continue" {
+        return true
+    }
+    if n.kind == "Block" {
+        return blockContinue(c, n)
+    }
+    if n.kind == "Arena" {
+        return blockContinue(c, c.nodes[n.e1])
+    }
+    if n.kind == "If" {
+        if blockContinue(c, c.nodes[n.e2]) {
+            return true
+        }
+        if n.e3 >= 0 {
+            return stmtContinue(c, n.e3)
+        }
+    }
+    if n.kind == "Match" {
+        var i = 0
+        while i < n.args.len {
+            var arm = c.nodes[n.args[i]]
+            if stmtContinue(c, arm.e1) {
+                return true
+            }
+            i = i + 1
+        }
+    }
+    return false
+}
+
+// ---------- for loops ----------
+
+function emitFor(em: &mut Emitter, n: Node) {
+    var itT = em.c.nodes[n.e1].ty
+    var forText = itT == "text"
+    var et = "int"
+    if !forText {
+        et = listElem(itT)
+    }
+    var body = em.c.nodes[n.e2]
+    var brk = blockBreak(&em.c, body)
+    var cont = blockContinue(&em.c, body)
+
+    em.forN = em.forN + 1
+    var iter = "brick_iter_" + to_text(em.forN)
+    var idx = "brick_i_" + to_text(em.forN)
+    var contLabel = ""
+    var endLabel = ""
+    if cont {
+        em.labelN = em.labelN + 1
+        contLabel = "brick_cont_" + to_text(em.labelN)
+    }
+    if brk {
+        em.labelN = em.labelN + 1
+        endLabel = "brick_loop_" + to_text(em.labelN) + "_end"
+    }
+    em.loopStarts.push(contLabel)
+    em.loopEnds.push(endLabel)
+
+    var cond = ""
+    var elem = ""
+    if forText {
+        cond = "(int64_t)strlen(" + iter + ")"
+        elem = "((int64_t)(unsigned char)" + iter + "[" + idx + "])"
+    } else {
+        cond = iter + ".len"
+        elem = "(*(" + ctype(et) + "*)brick_list_at(&(" + iter + "), " + idx + "))"
+    }
+
+    line(em, "{")
+    em.indent = em.indent + 1
+    line(em, ctype(itT) + " " + iter + " = " + expr(em, n.e1) + ";")
+    line(em, "int64_t " + idx + " = 0;")
+    line(em, "while (" + idx + " < " + cond + ") {")
+    em.indent = em.indent + 1
+    line(em, ctype(et) + " " + n.name + " = " + elem + ";")
+    var i = 0
+    while i < body.args.len {
+        emitStmt(em, body.args[i])
+        i = i + 1
+    }
+    if cont {
+        line(em, contLabel + ": ;")
+    }
+    line(em, idx + " = " + idx + " + 1;")
+    em.indent = em.indent - 1
+    line(em, "}")
+    if brk {
+        line(em, endLabel + ": ;")
+    }
+    em.indent = em.indent - 1
+    line(em, "}")
+
+    em.loopStarts = trimText(em.loopStarts, em.loopStarts.len - 1)
+    em.loopEnds = trimText(em.loopEnds, em.loopEnds.len - 1)
+}
+
+// ---------- program-level queries ----------
+
+function programUsesArgs(em: &Emitter) -> bool {
+    var i = 0
+    while i < em.c.nodes.len {
+        var n = em.c.nodes[i]
+        if n.kind == "Call" {
+            var callee = em.c.nodes[n.e1]
+            if callee.kind == "Ident" && callee.name == "args" {
+                return true
+            }
+        }
+        i = i + 1
+    }
+    return false
+}
+
+function cQuote(s: text) -> text {
+    var b = Builder()
+    b.add("\"")
+    var i = 0
+    while i < s.len {
+        var c = s[i]
+        if c == '\n' {
+            b.add("\\n")
+        } else if c == '\t' {
+            b.add("\\t")
+        } else if c == '\r' {
+            b.add("\\r")
+        } else if c == '\\' {
+            b.add("\\\\")
+        } else if c == '"' {
+        b.add("\\\"")
+    } else if c < 32 || c == 127 {
+        b.add(octal3(c))
+    } else {
+        b.add(slice(s, i, i + 1))
+    }
+    i = i + 1
+}
+b.add("\"")
+return b.build()
+}
+
+function octal3(c: int) -> text {
+    var d0 = c / 64
+    var d1 = (c / 8) % 8
+    var d2 = c % 8
+    return "\\" + to_text(d0) + to_text(d1) + to_text(d2)
+}
+
+function emitProgram(em: &mut Emitter) {
+    if programUsesArgs(em) {
+        em.usesArgs = 1
+    }
+    line(em, "/*")
+    line(em, " * Generated by the Brick compiler. Do not edit.")
+    line(em, " * Read this next to your .brick source.")
+    line(em, " */")
+    line(em, "")
+    line(em, "#include <stdint.h>")
+    line(em, "#include <stdbool.h>")
+    line(em, "#include <stdio.h>")
+    line(em, "#include <stdlib.h>")
+    line(em, "#include <string.h>")
+    line(em, "")
+    raw(em, runtimeText())
+    if em.usesArgs == 1 {
+        raw(em, argsRuntimeText())
+    }
+    line(em, "/* ---------------- types ---------------- */")
+    line(em, "")
+    emitForwardStructs(em)
+    emitEnums(em)
+    emitStructs(em)
+    line(em, "/* ------------- prototypes ------------- */")
+    line(em, "")
+    emitPrototypes(em)
+    line(em, "/* ------------- functions -------------- */")
+    line(em, "")
+    emitBodies(em)
+}
+
+// renderProgram runs the emitter over a checked program and returns the full C
+// text, ending in a newline -- the same buffer `brick emit` prints.
+function renderProgram(c: Checker, top: List(int)) -> text {
+    var em = newEmitter(c, top)
+    emitProgram(&mut em)
+    var b = Builder()
+    var i = 0
+    while i < em.out.len {
+        b.add(em.out[i])
+        i = i + 1
+    }
+    return b.build()
+}

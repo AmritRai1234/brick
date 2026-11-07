@@ -258,11 +258,12 @@ Mapped to the roadmap in the spec (§15):
       type dumper (`selfhost/checker.brick`) and the C emitter
       (`selfhost/emitter.brick`) are written in Brick and checked against the
       Go compiler (`brick tokdump`, `brick ast`, `brick typedump`, `brick emit`)
-      by `make selfhost` over every example, and `make selfhost-e2e` uses the
-      Brick-written emitter as the compiler and checks the resulting programs
-      run like the Go compiler's. Wiring the components into a single
-      self-hosted compiler is next; a length-carrying byte-string type is the
-      main language prerequisite (see `selfhost/README.md`).
+      by `make selfhost` over every example. `selfhost/brickc.brick` is the
+      whole pipeline as one program — lex, parse, resolve imports, check, emit —
+      a single self-hosted compiler; `make selfhost-e2e` uses it to compile each
+      example, builds the C with the system C compiler, and checks the result
+      runs like the Go compiler's. A length-carrying byte-string type is the
+      next language prerequisite (see `selfhost/README.md`).
 
 ### Semantics enforced by the checker
 
@@ -338,11 +339,12 @@ Brick-written compiler would need.
 With those in place, every box in the audit is ticked: Brick can express a
 lexer, a parser, symbol tables, type checking and a C emitter. The roadmap's
 last item (self-hosting, §15) is now a matter of writing the compiler in Brick
-itself — and that has started: the lexer (`selfhost/lexer.brick`), parser
+itself — and that has happened: the lexer (`selfhost/lexer.brick`), parser
 (`selfhost/parser.brick`), checker (`selfhost/checker.brick`) and C emitter
 (`selfhost/emitter.brick`) are self-hosted and verified against `brick tokdump`,
-`brick ast`, `brick typedump` and `brick emit` by `make selfhost`. Every stage
-of the pipeline now has a Brick implementation that agrees with the Go compiler.
+`brick ast`, `brick typedump` and `brick emit` by `make selfhost`, and
+`selfhost/brickc.brick` wires all four stages into one self-hosted compiler
+(source in, C out) that `make selfhost-e2e` exercises end to end.
 
 Each feature above landed the same way as the ones before it: implemented across
 the lexer/parser/checker/codegen/interpreter, with an example that `make diff`
@@ -374,7 +376,8 @@ away:
 | `v0.3.11` | self-hosted parser + AST dump; borrow keeps `List` element type |
 | `v0.3.12` | `brick typedump`: canonical inferred-type dump for self-host checks |
 | `v0.3.13` | self-hosted checker + type dump |
-| `v0.3.14` | self-hosted C emitter; shared `frontend.brick` (current) |
+| `v0.3.14` | self-hosted C emitter; shared `frontend.brick` |
+| `v0.3.15` | single self-hosted compiler (`brickc.brick`); shared `codegen.brick` (current) |
 
 ```sh
 git tag                     # list the tags
