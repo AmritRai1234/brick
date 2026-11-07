@@ -285,3 +285,34 @@ func TestConstCodegenInlines(t *testing.T) {
 		t.Errorf("const name should not appear in the output\n%s", out)
 	}
 }
+
+func TestForCodegen(t *testing.T) {
+	out := gen(t, `
+	function main() {
+		var xs = List(int)
+		var total = 0
+		for x in xs { total = total + x }
+		print(total)
+	}`)
+	for _, want := range []string{
+		"brick_iter_1",
+		"brick_i_1",
+		"while (brick_i_1 < brick_iter_1.len)",
+		"brick_list_at(&(brick_iter_1), brick_i_1)",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q\n%s", want, out)
+		}
+	}
+}
+
+func TestForContinueLabel(t *testing.T) {
+	out := gen(t, `
+	function main() {
+		var xs = List(int)
+		for x in xs { continue }
+	}`)
+	if !strings.Contains(out, "brick_cont_") {
+		t.Errorf("continue should emit a continue label\n%s", out)
+	}
+}

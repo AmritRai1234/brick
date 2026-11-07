@@ -218,6 +218,16 @@ type ArenaStmt struct {
 	Body *BlockStmt
 }
 
+// ForStmt iterates a List or text: `for x in iter { ... }`.
+type ForStmt struct {
+	base
+	Var  string
+	Iter Expr
+	Body *BlockStmt
+}
+
+func (*ForStmt) stmtNode() {}
+
 // BreakStmt leaves the innermost loop.
 type BreakStmt struct{ base }
 
@@ -397,6 +407,11 @@ func dumpStmt(b *strings.Builder, s Stmt, d int) {
 			b.WriteString("else:\n")
 			dumpStmt(b, st.Else, d+2)
 		}
+	case *ForStmt:
+		indent(b, d)
+		b.WriteString("For " + st.Var + " in\n")
+		dumpExpr(b, st.Iter, d+1)
+		dumpStmt(b, st.Body, d+1)
 	case *BreakStmt:
 		indent(b, d)
 		b.WriteString("Break\n")

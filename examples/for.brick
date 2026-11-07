@@ -1,0 +1,31 @@
+// for ... in: iterate a List or text directly (spec §5). break and continue
+// work, and continue still advances to the next item.
+function main() {
+    var xs = List(int)
+    var i = 0
+    while i < 5 {
+        xs.push(i * i)
+        i = i + 1
+    }
+
+    var total = 0
+    for x in xs {
+        total = total + x
+    }
+    print(total)   // 30 (0+1+4+9+16)
+
+    for x in xs {
+        if x == 4 {
+            continue
+        }
+        if x == 9 {
+            break
+        }
+        print(x)   // 0 1
+    }
+
+    var word = "hi"
+    for c in word {
+        print(c)   // 104 105  (each byte as an int)
+    }
+}

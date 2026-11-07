@@ -360,6 +360,24 @@ func (c *Checker) checkStmt(s ast.Stmt) {
 		c.checkStmt(st.Body)
 		c.loopDepth--
 
+	case *ast.ForStmt:
+		it := c.infer(st.Iter)
+		var et ast.Type
+		switch {
+		case it.Name == "List" && it.Elem != nil:
+			et = *it.Elem
+		case it.Name == "text" && !it.Ptr:
+			et = intT // iterating text yields each byte as an int
+		default:
+			c.errorf(st, "for can iterate a List or text, got %s", it)
+		}
+		c.push()
+		c.declare(st, st.Var, et)
+		c.loopDepth++
+		c.checkStmt(st.Body)
+		c.loopDepth--
+		c.pop()
+
 	case *ast.BreakStmt:
 		if c.loopDepth == 0 {
 			c.errorf(st, "break outside a loop")

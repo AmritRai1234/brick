@@ -233,3 +233,21 @@ func TestConst(t *testing.T) {
 	}`
 	mustRun(t, src, "20\nhi, brick\n10")
 }
+
+func TestFor(t *testing.T) {
+	src := `
+	function main() {
+		var xs = List(int)
+		var i = 0
+		while i < 5 { xs.push(i * i) i = i + 1 }
+		var total = 0
+		for x in xs {
+			if x == 4 { continue }
+			if x == 9 { break }
+			total = total + x
+		}
+		print(total)  // 0 + 1 = 1
+		for c in "hi" { print(c) }  // 104 105
+	}`
+	mustRun(t, src, "1\n104\n105")
+}

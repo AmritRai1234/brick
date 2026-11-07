@@ -317,3 +317,37 @@ func TestToTextNeedsInt(t *testing.T) {
 		t.Fatal("want an error: to_text needs an int")
 	}
 }
+
+func TestForOverList(t *testing.T) {
+	src := `
+	function main() {
+		var xs = List(int)
+		xs.push(1)
+		var total = 0
+		for x in xs { total = total + x }
+		print(total)
+	}`
+	if _, err := check(t, src); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestForOverText(t *testing.T) {
+	if _, err := check(t, `function main() { for c in "abc" { print(c) } }`); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestForElemHasElementType(t *testing.T) {
+	// the loop var is an int, so adding text to it is a type error
+	src := `function main() { var xs = List(int) for x in xs { print(x + "oops") } }`
+	if _, err := check(t, src); err == nil {
+		t.Fatal("want an error: x is an int, cannot add text")
+	}
+}
+
+func TestForOverNonIterable(t *testing.T) {
+	if _, err := check(t, `function main() { for x in 3 { print(x) } }`); err == nil {
+		t.Fatal("want an error for iterating something that is not a List or text")
+	}
+}

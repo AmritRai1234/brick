@@ -240,6 +240,9 @@ func (in *interp) execStmt(s ast.Stmt, env *Env) error {
 			}
 		}
 
+	case *ast.ForStmt:
+		return in.execFor(st, env)
+
 	case *ast.BreakStmt:
 		return breakSignal{}
 
@@ -255,6 +258,51 @@ func (in *interp) execStmt(s ast.Stmt, env *Env) error {
 	}
 	return &RuntimeError{Msg: "unsupported statement", Line: line, Col: col}
 }
+
+func (in *interp) execFor(st *ast.ForStmt, env *Env) error {
+	v, err := in.eval(st.Iter, env)
+	if err != nil {
+		return err
+	}
+	run := func(item Value) error {
+		iterScope := newEnv(env)
+		iterScope.declare(st.Var, deepCopy(item))
+		err := in.execStmt(st.Body, iterScope)
+		if _, ok := err.(continueSignal); ok {
+			return nil
+		}
+		if _, ok := err.(breakSignal); ok {
+			return errBreak
+		}
+		return err
+	}
+	switch it := read(v).(type) {
+	case *List:
+		for _, item := range it.Items {
+			if err := run(item); err != nil {
+				if err == errBreak {
+					return nil
+				}
+				return err
+			}
+		}
+	case string:
+		for i := 0; i < len(it); i++ {
+			if err := run(int64(it[i])); err != nil {
+				if err == errBreak {
+					return nil
+				}
+				return err
+			}
+		}
+	default:
+		return &RuntimeError{Msg: "for can only iterate a List or text", Line: st.Line, Col: st.Col}
+	}
+	return nil
+}
+
+// errBreak is an internal marker used by execFor to stop iterating.
+var errBreak = errors.New("break")
 
 // returnSignal unwinds the stack out of a function body.
 type returnSignal struct{ v Value }

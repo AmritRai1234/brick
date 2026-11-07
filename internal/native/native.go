@@ -284,6 +284,9 @@ func (g *Gen) genStmt(s ast.Stmt) {
 	case *ast.BreakStmt, *ast.ContinueStmt:
 		g.errorf("break/continue are not supported by the native backend yet")
 
+	case *ast.ForStmt:
+		g.errorf("for is not supported by the native backend yet")
+
 	default:
 		g.errorf("statement %T", s)
 	}

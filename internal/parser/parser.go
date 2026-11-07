@@ -132,6 +132,8 @@ func (p *Parser) parseStmt() ast.Stmt {
 		return p.parseIf()
 	case token.WHILE:
 		return p.parseWhile()
+	case token.FOR:
+		return p.parseFor()
 	case token.ARENA:
 		return p.parseArena()
 	case token.BREAK:
@@ -230,6 +232,19 @@ func (p *Parser) parseWhile() ast.Stmt {
 	ast.SetBase(s, w)
 	p.noStructLit++
 	s.Cond = p.parseExpr()
+	p.noStructLit--
+	s.Body = p.parseBlock()
+	return s
+}
+
+func (p *Parser) parseFor() ast.Stmt {
+	f := p.advance() // for
+	s := &ast.ForStmt{}
+	ast.SetBase(s, f)
+	s.Var = p.expect(token.IDENT).Literal
+	p.expect(token.IN)
+	p.noStructLit++ // so `x {` is not read as a struct literal
+	s.Iter = p.parseExpr()
 	p.noStructLit--
 	s.Body = p.parseBlock()
 	return s

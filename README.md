@@ -225,7 +225,10 @@ Mapped to the roadmap in the spec (§15):
       `bool`, `text`; arithmetic, comparison and logical operators; top-level
       `const NAME = <compile-time expression>` (folded and inlined)
 - [x] **3. `if` / `else` and `while`**, plus `break` and `continue` (which
-      leave / advance the innermost loop, even from inside a `match`)
+      leave / advance the innermost loop, even from inside a `match`), and
+      `for x in xs { ... }` — iterate a `List(T)` (binding each element) or
+      `text` (binding each byte as an `int`). `for` is pure sugar over `while`
+      (§5), so a `continue` still advances to the next item.
 - [x] **4. `function`** — typed parameters and return types, recursion,
       forward references; builtin `print`
 - [x] **5. `struct`, then `extern`** — struct literals, field access, borrowing
@@ -308,7 +311,7 @@ Brick-written compiler would need.
 
 - structs, `List(T)`, `Map(text, V)`, `text`, `int`, `float`, `bool`
 - `enum` + `match` (the natural way to represent tokens and AST nodes)
-- `while` with `break` / `continue`
+- `while` and `for ... in` with `break` / `continue`
 - borrowing (`&`, `&mut`) — e.g. `&mut xs[0]` passed into a function
 - structs holding lists, and `xs[i].field = v`
 - reading and writing files (`read_file`, `write_file`), command-line `args()`
@@ -321,11 +324,9 @@ Brick-written compiler would need.
 
 **Still missing (in rough priority order)**
 
-1. `for x in xs { ... }` — pure sugar the spec already describes as a rewrite
-   into `while` (§5).
-2. character literals (`'a'`) — today `s[i]` yields an `int` byte, which works
+1. character literals (`'a'`) — today `s[i]` yields an `int` byte, which works
    but reads poorly.
-3. `to_text` for `float` and `bool` — today it takes only an `int`.
+2. `to_text` for `float` and `bool` — today it takes only an `int`.
 
 Each will land the same way as the features above: implemented across the lexer
 /parser/checker/codegen/interpreter, with an example that `make diff` proves the
@@ -343,7 +344,13 @@ away:
 | `v0.2.1` | interpreter + differential testing, `extern` linked end to end |
 | `v0.2.2` | the official formatter |
 | `v0.2.3` | arenas |
-| `v0.3.0` | language server (current) |
+| `v0.3.0` | language server |
+| `v0.3.1` | `break` / `continue` + self-hosting audit |
+| `v0.3.2` | `Map(text, V)` |
+| `v0.3.3` | `import` / multi-file programs |
+| `v0.3.4` | text `Builder` + `to_text(int)` |
+| `v0.3.5` | top-level `const` |
+| `v0.3.6` | `for x in xs { ... }` (current) |
 
 ```sh
 git tag                     # list the tags

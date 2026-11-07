@@ -150,3 +150,24 @@ func TestParseBreakContinue(t *testing.T) {
 		t.Fatalf("want ContinueStmt, got %T", w.Body.Stmts[1])
 	}
 }
+
+func TestParseFor(t *testing.T) {
+	prog, err := Parse(`function main() { for x in xs { print(x) } }`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fd := prog.Stmts[0].(*ast.FuncDecl)
+	fs, ok := fd.Body.Stmts[0].(*ast.ForStmt)
+	if !ok {
+		t.Fatalf("want ForStmt, got %T", fd.Body.Stmts[0])
+	}
+	if fs.Var != "x" {
+		t.Errorf("loop var = %q, want x", fs.Var)
+	}
+	if _, ok := fs.Iter.(*ast.Ident); !ok {
+		t.Errorf("iter should be an ident, got %T", fs.Iter)
+	}
+	if fs.Body == nil || len(fs.Body.Stmts) != 1 {
+		t.Fatalf("body not parsed: %+v", fs.Body)
+	}
+}

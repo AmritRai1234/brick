@@ -20,6 +20,7 @@ type Generator struct {
 	tmpN     int
 	arenaN   int
 	labelN   int
+	forN     int
 	usesArgs bool
 	inMain   bool
 	// loopStarts/loopEnds are label stacks for the enclosing while loops, so
@@ -834,6 +835,9 @@ func (g *Generator) emitStmt(s ast.Stmt) {
 		g.loopStarts = g.loopStarts[:len(g.loopStarts)-1]
 		g.loopEnds = g.loopEnds[:len(g.loopEnds)-1]
 
+	case *ast.ForStmt:
+		g.emitFor(st)
+
 	case *ast.BreakStmt:
 		g.line("goto " + g.loopEnds[len(g.loopEnds)-1] + ";")
 
@@ -1156,6 +1160,9 @@ func programUsesArgs(prog *ast.Program) bool {
 		case *ast.WhileStmt:
 			walkExpr(st.Cond)
 			walkStmt(st.Body)
+		case *ast.ForStmt:
+			walkExpr(st.Iter)
+			walkStmt(st.Body)
 		case *ast.ArenaStmt:
 			walkStmt(st.Body)
 		case *ast.MatchStmt:
@@ -1175,6 +1182,73 @@ func programUsesArgs(prog *ast.Program) bool {
 		walkStmt(s)
 	}
 	return found
+}
+
+// emitFor lowers `for x in iter { body }`. It iterates with an index so a
+// continue can jump to just before the increment (a C for-loop's continue does
+// the same; an index-based rewrite would otherwise skip the increment).
+func (g *Generator) emitFor(st *ast.ForStmt) {
+	itT := g.types[st.Iter]
+	forText := itT.Name == "text"
+	var et ast.Type
+	if forText {
+		et = ast.Type{Name: "int"} // text yields bytes as ints
+	} else {
+		et = *itT.Elem
+	}
+
+	hasBreak, hasContinue := blockLoopJumps(st.Body)
+
+	g.forN++
+	n := g.forN
+	iter := fmt.Sprintf("brick_iter_%d", n)
+	idx := fmt.Sprintf("brick_i_%d", n)
+
+	contLabel, endLabel := "", ""
+	if hasContinue {
+		g.labelN++
+		contLabel = fmt.Sprintf("brick_cont_%d", g.labelN)
+	}
+	if hasBreak {
+		g.labelN++
+		endLabel = fmt.Sprintf("brick_loop_%d_end", g.labelN)
+	}
+	g.loopStarts = append(g.loopStarts, contLabel)
+	g.loopEnds = append(g.loopEnds, endLabel)
+
+	var cond, elem string
+	if forText {
+		cond = fmt.Sprintf("(int64_t)strlen(%s)", iter)
+		elem = fmt.Sprintf("((int64_t)(unsigned char)%s[%s])", iter, idx)
+	} else {
+		cond = fmt.Sprintf("%s.len", iter)
+		elem = fmt.Sprintf("(*(%s*)brick_list_at(&(%s), %s))", g.ctype(et), iter, idx)
+	}
+
+	g.line("{")
+	g.indent++
+	g.line(fmt.Sprintf("%s %s = %s;", g.ctype(itT), iter, g.expr(st.Iter)))
+	g.line(fmt.Sprintf("int64_t %s = 0;", idx))
+	g.line(fmt.Sprintf("while (%s < %s) {", idx, cond))
+	g.indent++
+	g.line(fmt.Sprintf("%s %s = %s;", g.ctype(et), st.Var, elem))
+	for _, inner := range st.Body.Stmts {
+		g.emitStmt(inner)
+	}
+	if hasContinue {
+		g.line(contLabel + ": ;")
+	}
+	g.line(fmt.Sprintf("%s = %s + 1;", idx, idx))
+	g.indent--
+	g.line("}")
+	if hasBreak {
+		g.line(endLabel + ": ;")
+	}
+	g.indent--
+	g.line("}")
+
+	g.loopStarts = g.loopStarts[:len(g.loopStarts)-1]
+	g.loopEnds = g.loopEnds[:len(g.loopEnds)-1]
 }
 
 // blockLoopJumps reports whether a loop body directly uses break and/or
