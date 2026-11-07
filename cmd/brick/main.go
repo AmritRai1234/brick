@@ -19,6 +19,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -28,6 +29,7 @@ import (
 	"brick/internal/ast"
 	"brick/internal/checker"
 	"brick/internal/codegen"
+	"brick/internal/interp"
 	"brick/internal/lexer"
 	"brick/internal/native"
 	"brick/internal/parser"
@@ -79,12 +81,27 @@ func main() {
 		kind, src := lower(file, target, false)
 		_ = kind
 		fmt.Print(src)
+	case "interp":
+		_, _, file, progArgs := parseArgs(rest)
+		prog := mustParse(readFile(file))
+		ck := mustCheck(prog)
+		if err := interp.Run(prog, ck, interp.Options{
+			Args:   progArgs,
+			Stdout: os.Stdout,
+			Stderr: os.Stderr,
+		}); err != nil {
+			fmt.Fprintf(os.Stderr, "brick: %v\n", err)
+			os.Exit(1)
+		}
+	case "diff":
+		target, _, file, progArgs := parseArgs(rest)
+		os.Exit(diffRun(file, orAuto(target), progArgs))
 	case "run":
 		target, _, file, progArgs := parseArgs(rest)
 		kind, src := lower(file, orAuto(target), true)
 		bin := tempPath("brick-bin-*")
 		defer os.Remove(bin)
-		linkBinary(kind, src, bin)
+		linkBinary(kind, src, bin, file)
 		execBinary(bin, progArgs)
 	case "build":
 		target, out, file, _ := parseArgs(rest)
@@ -92,13 +109,67 @@ func main() {
 			out = strings.TrimSuffix(filepath.Base(file), filepath.Ext(file))
 		}
 		kind, src := lower(file, orAuto(target), true)
-		linkBinary(kind, src, out)
+		linkBinary(kind, src, out, file)
 		fmt.Printf("built %s (%s backend)\n", out, kind)
 	default:
 		fmt.Fprintf(os.Stderr, "brick: unknown command %q\n\n", cmd)
 		usage()
 		os.Exit(2)
 	}
+}
+
+// diffRun implements differential testing (§10): run the program on the
+// interpreter and as a compiled binary, and compare their output. A mismatch
+// means one of the two has a bug. Returns a process exit code.
+func diffRun(file, target string, progArgs []string) int {
+	prog := mustParse(readFile(file))
+	if programHasExtern(prog) {
+		fmt.Printf("skip: %s calls extern C functions (interpreter cannot run C)\n", file)
+		return 0
+	}
+	ck := mustCheck(prog)
+
+	// Interpret.
+	var iout, ierr bytes.Buffer
+	iErr := interp.Run(prog, ck, interp.Options{Args: progArgs, Stdout: &iout, Stderr: &ierr})
+
+	// Compile and run.
+	kind, src := lower(file, target, false)
+	bin := tempPath("brick-diff-*")
+	defer os.Remove(bin)
+	linkBinary(kind, src, bin, file)
+	cmd := exec.Command(bin, progArgs...)
+	var cout, cerr bytes.Buffer
+	cmd.Stdout = &cout
+	cmd.Stderr = &cerr
+	cErr := cmd.Run()
+
+	agree := iout.String() == cout.String()
+	if agree && iErr == nil && cErr == nil {
+		fmt.Printf("agree: %s (via %s backend)\n", file, kind)
+		return 0
+	}
+	fmt.Fprintf(os.Stderr, "DISAGREE: %s\n", file)
+	if iErr != nil {
+		fmt.Fprintf(os.Stderr, "  interpreter error: %v\n", iErr)
+	}
+	if cErr != nil {
+		fmt.Fprintf(os.Stderr, "  compiled error:    %v\n", cErr)
+	}
+	if !agree {
+		fmt.Fprintf(os.Stderr, "--- interpreter stdout ---\n%s", iout.String())
+		fmt.Fprintf(os.Stderr, "--- compiled stdout ----\n%s", cout.String())
+	}
+	return 1
+}
+
+func programHasExtern(prog *ast.Program) bool {
+	for _, s := range prog.Stmts {
+		if fd, ok := s.(*ast.FuncDecl); ok && fd.Extern {
+			return true
+		}
+	}
+	return false
 }
 
 func orAuto(t string) string {
@@ -117,6 +188,8 @@ Usage:
   brick emit  <file.brick>             print the generated C
   brick asm   <file.brick>             print the native x86-64 assembly
   brick check <file.brick>             type-check only
+  brick interp <file.brick> [args...]  run on the tree-walking interpreter
+  brick diff  <file.brick> [args...]   compile+run and interpret, compare output
   brick tokens <file.brick>            print the token stream
   brick ast   <file.brick>             print the parsed tree
   brick version
@@ -273,13 +346,20 @@ func writeFile(path, content string) {
 }
 
 // linkBinary produces an executable at out from either C or assembly source.
-func linkBinary(kind, src, out string) {
+// Any C files sitting next to the .brick source (sourceFile) are compiled and
+// linked too, which is how a program calls into C via `extern` (see
+// examples/extern.brick alongside examples/extern.c).
+func linkBinary(kind, src, out, sourceFile string) {
+	extra := siblingCFiles(sourceFile)
 	switch kind {
 	case "c":
 		cfile := tempPath("brick-*.c")
 		defer os.Remove(cfile)
 		writeFile(cfile, src)
-		run(cc(), "-std=c11", "-O2", "-Wall", "-Wno-unused-parameter", cfile, "-o", out)
+		args := []string{"-std=c11", "-O2", "-Wall", "-Wno-unused-parameter", cfile}
+		args = append(args, extra...)
+		args = append(args, "-o", out)
+		run(cc(), args...)
 	case "native":
 		asmfile := tempPath("brick-*.s")
 		defer os.Remove(asmfile)
@@ -287,10 +367,23 @@ func linkBinary(kind, src, out string) {
 		defer os.Remove(objfile)
 		writeFile(asmfile, src)
 		run("as", asmfile, "-o", objfile)
-		run(cc(), objfile, "-o", out)
+		args := append([]string{objfile}, extra...)
+		args = append(args, "-o", out)
+		run(cc(), args...)
 	default:
 		die("unknown backend " + kind)
 	}
+}
+
+// siblingCFiles returns the .c files in the same directory as the Brick source,
+// so `extern` functions they define resolve at link time.
+func siblingCFiles(sourceFile string) []string {
+	dir := filepath.Dir(sourceFile)
+	matches, err := filepath.Glob(filepath.Join(dir, "*.c"))
+	if err != nil {
+		return nil
+	}
+	return matches
 }
 
 func execBinary(bin string, args []string) {

@@ -31,6 +31,8 @@ compiler with `BRICK_CC=clang`.
 | `brick emit <file>` | Print the generated C (nothing hidden) |
 | `brick asm <file>` | Print the native x86-64 assembly |
 | `brick check <file>` | Type-check only |
+| `brick interp <file> [args...]` | Run on the tree-walking interpreter |
+| `brick diff <file> [args...]` | Compile+run and interpret, compare output |
 | `brick tokens <file>` | Dump the token stream |
 | `brick ast <file>` | Dump the parsed tree |
 | `brick version` | Print the compiler version |
@@ -169,7 +171,10 @@ Mapped to the roadmap in the spec (§15):
       assign to an index) and text (`.len`, `s[i]` as a byte, `+` concatenation,
       `==` / `!=`). These are the pieces a lexer and parser are built from.
 - [ ] 7. Language server and formatter
-- [ ] 8. Interpreter for differential testing
+- [x] **8. Interpreter for differential testing** — a slow tree-walking
+      interpreter (`internal/interp`) runs the same programs as the compiled
+      binary; `brick diff` and `make diff` compare their output and report any
+      disagreement (§10). It covers the whole core language.
 - [ ] 9. Self-hosting
 
 ### Semantics enforced by the checker
@@ -200,6 +205,7 @@ internal/ast/       AST nodes and debug printer
 internal/checker/   symbol tables, type checks, expression types
 internal/codegen/   AST -> C
 internal/native/     AST -> x86-64 assembly (Brick's own backend)
+internal/interp/     AST -> values (tree-walking interpreter, for diff testing)
 docs/SPEC.md        the language design notes
 examples/           runnable Brick programs
 ```
@@ -230,5 +236,11 @@ example in `examples/` is a working end-to-end case.
 
 ## Roadmap next steps
 
-The natural next pieces (spec §15, §16) are `enum`/`match`, arenas, a formatter,
-and the differential-testing interpreter. See `docs/SPEC.md` for the full plan.
+The differential-testing interpreter is in place (§10): `make diff` runs every
+example through both the interpreter and the compiled binary and checks that
+they agree. The natural next pieces (spec §15, §16) are a formatter, arenas and
+a language server. See `docs/SPEC.md` for the full plan.
+
+Calling into C now works end to end: the compiler links any `.c` files that sit
+next to the `.brick` source, so `examples/extern.brick` (which calls `triple`
+from `examples/extern.c`) builds and runs with `brick run`.

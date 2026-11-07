@@ -1,0 +1,794 @@
+// Package interp is a slow, simple tree-walking interpreter for Brick.
+//
+// It exists for differential testing (§10): run the same program through the
+// interpreter and through the compiled binary, and compare the output. Any
+// difference means one of them has a bug. The interpreter is deliberately
+// naive -- it favors being obviously correct over being fast.
+package interp
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"strconv"
+
+	"brick/internal/ast"
+	"brick/internal/checker"
+)
+
+// RuntimeError is a Brick-level runtime failure (e.g. an out-of-range index).
+type RuntimeError struct {
+	Msg  string
+	Line int
+	Col  int
+}
+
+func (e *RuntimeError) Error() string { return fmt.Sprintf("%d:%d: %s", e.Line, e.Col, e.Msg) }
+
+// ---------- values ----------
+
+// Value is any Brick runtime value.
+type Value interface{}
+
+// List is a growable list value.
+type List struct {
+	Elem  ast.Type
+	Items []Value
+}
+
+// Struct is an instance of a struct type. Fields are slots so a field can be
+// the target of a borrow (e.g. p.x = ... through a &mut).
+type Struct struct {
+	Type   string
+	Fields map[string]*Value
+}
+
+// Enum is a tagged-union value.
+type Enum struct {
+	Type    string
+	Variant string
+	Fields  []Value
+}
+
+// Ref is a borrow (& or &mut): a pointer to a variable slot.
+type Ref struct {
+	Slot *Value
+}
+
+// ---------- environment ----------
+
+// Env maps names to variable slots. Slots are pointers so a borrow can alias
+// the variable it points at.
+type Env struct {
+	parent *Env
+	vars   map[string]*Value
+}
+
+func newEnv(parent *Env) *Env {
+	return &Env{parent: parent, vars: map[string]*Value{}}
+}
+
+func (e *Env) declare(name string, v Value) *Value {
+	slot := new(Value)
+	*slot = v
+	e.vars[name] = slot
+	return slot
+}
+
+func (e *Env) lookup(name string) (*Value, bool) {
+	for env := e; env != nil; env = env.parent {
+		if slot, ok := env.vars[name]; ok {
+			return slot, true
+		}
+	}
+	return nil, false
+}
+
+// ---------- interpreter ----------
+
+type interp struct {
+	ck      *checker.Checker
+	funcs   map[string]*ast.FuncDecl
+	globals *Env
+	out     io.Writer
+	errw    io.Writer
+	args    []string
+	steps   int
+}
+
+// Options configures a Run.
+type Options struct {
+	Args   []string
+	Stdout io.Writer
+	Stderr io.Writer
+}
+
+// Run interprets prog. The program must already have passed the checker; its
+// results are reused for types and struct/enum layouts.
+func Run(prog *ast.Program, ck *checker.Checker, opt Options) error {
+	in := &interp{
+		ck:      ck,
+		funcs:   map[string]*ast.FuncDecl{},
+		globals: newEnv(nil),
+		out:     opt.Stdout,
+		errw:    opt.Stderr,
+		args:    opt.Args,
+	}
+	if in.out == nil {
+		in.out = os.Stdout
+	}
+	if in.errw == nil {
+		in.errw = os.Stderr
+	}
+	for _, s := range prog.Stmts {
+		if fd, ok := s.(*ast.FuncDecl); ok {
+			in.funcs[fd.Name] = fd
+		}
+	}
+	main, ok := in.funcs["main"]
+	if !ok {
+		return &RuntimeError{Msg: "no main function"}
+	}
+	_, err := in.callFunc(main, nil)
+	return err
+}
+
+const stepLimit = 200_000_000
+
+func (in *interp) tick(line, col int) error {
+	in.steps++
+	if in.steps > stepLimit {
+		return &RuntimeError{Msg: "step limit exceeded (possible infinite loop)", Line: line, Col: col}
+	}
+	return nil
+}
+
+// ---------- statements ----------
+
+func (in *interp) execStmts(stmts []ast.Stmt, env *Env) error {
+	for _, s := range stmts {
+		if err := in.execStmt(s, env); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (in *interp) execStmt(s ast.Stmt, env *Env) error {
+	line, col := s.Pos()
+	if err := in.tick(line, col); err != nil {
+		return err
+	}
+	switch st := s.(type) {
+	case *ast.VarStmt:
+		v, err := in.eval(st.Value, env)
+		if err != nil {
+			return err
+		}
+		env.declare(st.Name, deepCopy(read(v)))
+		return nil
+	case *ast.AssignStmt:
+		v, err := in.eval(st.Value, env)
+		if err != nil {
+			return err
+		}
+		slot, err := in.lvalue(st.Target, env)
+		if err != nil {
+			return err
+		}
+		*slot = deepCopy(read(v))
+		return nil
+	case *ast.ReturnStmt:
+		if st.Value == nil {
+			return returnSignal{nil}
+		}
+		v, err := in.eval(st.Value, env)
+		if err != nil {
+			return err
+		}
+		return returnSignal{read(v)}
+	case *ast.ExprStmt:
+		_, err := in.eval(st.X, env)
+		return err
+	case *ast.BlockStmt:
+		return in.execStmts(st.Stmts, newEnv(env))
+	case *ast.IfStmt:
+		c, err := in.eval(st.Cond, env)
+		if err != nil {
+			return err
+		}
+		if read(c).(bool) {
+			return in.execStmt(st.Then, env)
+		}
+		if st.Else != nil {
+			return in.execStmt(st.Else, env)
+		}
+		return nil
+	case *ast.WhileStmt:
+		for {
+			c, err := in.eval(st.Cond, env)
+			if err != nil {
+				return err
+			}
+			if !read(c).(bool) {
+				return nil
+			}
+			if err := in.execStmt(st.Body, env); err != nil {
+				return err
+			}
+		}
+	case *ast.MatchStmt:
+		return in.execMatch(st, env)
+	case *ast.FuncDecl:
+		in.funcs[st.Name] = st // forward/extern declarations
+		return nil
+	case *ast.StructDecl, *ast.EnumDecl, *ast.ImportStmt:
+		return nil
+	}
+	return &RuntimeError{Msg: "unsupported statement", Line: line, Col: col}
+}
+
+// returnSignal unwinds the stack out of a function body.
+type returnSignal struct{ v Value }
+
+func (returnSignal) Error() string { return "return" }
+
+func (in *interp) execMatch(st *ast.MatchStmt, env *Env) error {
+	v, err := in.eval(st.Scrutinee, env)
+	if err != nil {
+		return err
+	}
+	e, ok := read(v).(*Enum)
+	if !ok {
+		return &RuntimeError{Msg: "match scrutinee is not an enum", Line: st.Line, Col: st.Col}
+	}
+	for _, arm := range st.Arms {
+		if !arm.Pattern.IsWild {
+			if arm.Pattern.Enum != e.Type || arm.Pattern.Variant != e.Variant {
+				continue
+			}
+		}
+		armEnv := newEnv(env)
+		for i, name := range arm.Pattern.Binds {
+			var fv Value
+			if i < len(e.Fields) {
+				fv = e.Fields[i]
+			}
+			armEnv.declare(name, fv)
+		}
+		return in.execStmt(arm.Body, armEnv)
+	}
+	return &RuntimeError{Msg: "no match arm handled " + e.Type + "." + e.Variant, Line: st.Line, Col: st.Col}
+}
+
+// ---------- functions ----------
+
+func (in *interp) callFunc(fd *ast.FuncDecl, argv []Value) (Value, error) {
+	if fd.Extern {
+		return nil, &RuntimeError{Msg: "cannot interpret extern function " + fd.Name, Line: fd.Line, Col: fd.Col}
+	}
+	env := newEnv(in.globals)
+	for i, p := range fd.Params {
+		var v Value
+		if i < len(argv) {
+			v = argv[i]
+		} else {
+			v = zeroValue(p.Type)
+		}
+		env.declare(p.Name, v)
+	}
+	err := in.execStmts(fd.Body.Stmts, env)
+	if err != nil {
+		if r, ok := err.(returnSignal); ok {
+			return r.v, nil
+		}
+		return nil, err
+	}
+	return zeroValue(fd.ReturnType), nil
+}
+
+// ---------- expressions ----------
+
+func (in *interp) eval(e ast.Expr, env *Env) (Value, error) {
+	line, col := e.Pos()
+	if err := in.tick(line, col); err != nil {
+		return nil, err
+	}
+	switch ex := e.(type) {
+	case *ast.IntLit:
+		return ex.Value, nil
+	case *ast.FloatLit:
+		return ex.Value, nil
+	case *ast.StringLit:
+		return ex.Value, nil
+	case *ast.BoolLit:
+		return ex.Value, nil
+	case *ast.Ident:
+		slot, ok := env.lookup(ex.Name)
+		if !ok {
+			return nil, &RuntimeError{Msg: "undefined name " + ex.Name, Line: line, Col: col}
+		}
+		return *slot, nil
+	case *ast.UnaryExpr:
+		return in.evalUnary(ex, env)
+	case *ast.BinaryExpr:
+		return in.evalBinary(ex, env)
+	case *ast.FieldExpr:
+		return in.evalField(ex, env)
+	case *ast.IndexExpr:
+		return in.evalIndex(ex, env)
+	case *ast.StructLit:
+		return in.evalStructLit(ex, env)
+	case *ast.CallExpr:
+		return in.evalCall(ex, env)
+	}
+	return nil, &RuntimeError{Msg: "unsupported expression", Line: line, Col: col}
+}
+
+func (in *interp) evalUnary(ex *ast.UnaryExpr, env *Env) (Value, error) {
+	switch ex.Op {
+	case "&", "&mut":
+		slot, err := in.lvalue(ex.Operand, env)
+		if err != nil {
+			return nil, err
+		}
+		return &Ref{Slot: slot}, nil
+	case "-":
+		v, err := in.eval(ex.Operand, env)
+		if err != nil {
+			return nil, err
+		}
+		switch n := read(v).(type) {
+		case int64:
+			return -n, nil
+		case float64:
+			return -n, nil
+		}
+	case "!":
+		v, err := in.eval(ex.Operand, env)
+		if err != nil {
+			return nil, err
+		}
+		return !read(v).(bool), nil
+	}
+	return nil, &RuntimeError{Msg: "unsupported unary operator " + ex.Op, Line: ex.Line, Col: ex.Col}
+}
+
+func (in *interp) evalBinary(ex *ast.BinaryExpr, env *Env) (Value, error) {
+	// Short-circuit the logical operators.
+	if ex.Op == "&&" || ex.Op == "||" {
+		l, err := in.eval(ex.Left, env)
+		if err != nil {
+			return nil, err
+		}
+		lb := read(l).(bool)
+		if ex.Op == "&&" && !lb {
+			return false, nil
+		}
+		if ex.Op == "||" && lb {
+			return true, nil
+		}
+		r, err := in.eval(ex.Right, env)
+		if err != nil {
+			return nil, err
+		}
+		return read(r).(bool), nil
+	}
+
+	lv, err := in.eval(ex.Left, env)
+	if err != nil {
+		return nil, err
+	}
+	rv, err := in.eval(ex.Right, env)
+	if err != nil {
+		return nil, err
+	}
+	l := read(lv)
+	r := read(rv)
+
+	switch ex.Op {
+	case "+":
+		switch a := l.(type) {
+		case int64:
+			return a + r.(int64), nil
+		case float64:
+			return a + r.(float64), nil
+		case string:
+			return a + r.(string), nil
+		}
+	case "-":
+		if a, ok := l.(int64); ok {
+			return a - r.(int64), nil
+		}
+		return l.(float64) - r.(float64), nil
+	case "*":
+		if a, ok := l.(int64); ok {
+			return a * r.(int64), nil
+		}
+		return l.(float64) * r.(float64), nil
+	case "/":
+		if a, ok := l.(int64); ok {
+			b := r.(int64)
+			if b == 0 {
+				return nil, &RuntimeError{Msg: "division by zero", Line: ex.Line, Col: ex.Col}
+			}
+			return a / b, nil
+		}
+		return l.(float64) / r.(float64), nil
+	case "%":
+		b := r.(int64)
+		if b == 0 {
+			return nil, &RuntimeError{Msg: "division by zero", Line: ex.Line, Col: ex.Col}
+		}
+		return l.(int64) % b, nil
+	case "==":
+		return equal(l, r), nil
+	case "!=":
+		return !equal(l, r), nil
+	case "<", "<=", ">", ">=":
+		return cmp(ex.Op, l, r), nil
+	}
+	return nil, &RuntimeError{Msg: "unsupported binary operator " + ex.Op, Line: ex.Line, Col: ex.Col}
+}
+
+func equal(a, b Value) bool {
+	switch x := a.(type) {
+	case int64:
+		return x == b.(int64)
+	case float64:
+		return x == b.(float64)
+	case bool:
+		return x == b.(bool)
+	case string:
+		return x == b.(string)
+	}
+	return false
+}
+
+func cmp(op string, a, b Value) bool {
+	switch x := a.(type) {
+	case int64:
+		y := b.(int64)
+		return applyCmp(op, x < y, x > y, x == y)
+	case float64:
+		y := b.(float64)
+		return applyCmp(op, x < y, x > y, x == y)
+	case string:
+		y := b.(string)
+		return applyCmp(op, x < y, x > y, x == y)
+	}
+	return false
+}
+
+func applyCmp(op string, lt, gt, eq bool) bool {
+	switch op {
+	case "<":
+		return lt
+	case "<=":
+		return lt || eq
+	case ">":
+		return gt
+	case ">=":
+		return gt || eq
+	}
+	return false
+}
+
+func (in *interp) evalField(ex *ast.FieldExpr, env *Env) (Value, error) {
+	// Enum variant as a value: Color.Red.
+	if id, ok := ex.Base.(*ast.Ident); ok {
+		if _, isEnum := in.ck.Enums[id.Name]; isEnum {
+			return &Enum{Type: id.Name, Variant: ex.Field}, nil
+		}
+	}
+	base, err := in.eval(ex.Base, env)
+	if err != nil {
+		return nil, err
+	}
+	switch v := read(base).(type) {
+	case *Struct:
+		fv, ok := v.Fields[ex.Field]
+		if !ok {
+			return nil, &RuntimeError{Msg: "no field " + ex.Field + " on " + v.Type, Line: ex.Line, Col: ex.Col}
+		}
+		return *fv, nil
+	case string:
+		if ex.Field == "len" {
+			return int64(len(v)), nil
+		}
+	case *List:
+		if ex.Field == "len" {
+			return int64(len(v.Items)), nil
+		}
+	}
+	return nil, &RuntimeError{Msg: "no field " + ex.Field, Line: ex.Line, Col: ex.Col}
+}
+
+func (in *interp) evalIndex(ex *ast.IndexExpr, env *Env) (Value, error) {
+	base, err := in.eval(ex.Base, env)
+	if err != nil {
+		return nil, err
+	}
+	iv, err := in.eval(ex.Index, env)
+	if err != nil {
+		return nil, err
+	}
+	i := read(iv).(int64)
+	switch v := read(base).(type) {
+	case *List:
+		if i < 0 || int(i) >= len(v.Items) {
+			return nil, &RuntimeError{Msg: "list index out of range", Line: ex.Line, Col: ex.Col}
+		}
+		return v.Items[i], nil
+	case string:
+		if i < 0 || int(i) >= len(v) {
+			return nil, &RuntimeError{Msg: "text index out of range", Line: ex.Line, Col: ex.Col}
+		}
+		return int64(v[i]), nil
+	}
+	return nil, &RuntimeError{Msg: "cannot index this value", Line: ex.Line, Col: ex.Col}
+}
+
+func (in *interp) evalStructLit(ex *ast.StructLit, env *Env) (Value, error) {
+	s := &Struct{Type: ex.Name, Fields: map[string]*Value{}}
+	for _, f := range ex.Fields {
+		v, err := in.eval(f.Value, env)
+		if err != nil {
+			return nil, err
+		}
+		slot := new(Value)
+		*slot = deepCopy(read(v))
+		s.Fields[f.Name] = slot
+	}
+	return s, nil
+}
+
+func (in *interp) evalCall(ex *ast.CallExpr, env *Env) (Value, error) {
+	// Builtins.
+	if id, ok := ex.Callee.(*ast.Ident); ok {
+		switch id.Name {
+		case "print":
+			return nil, in.print(in.out, ex.Args[0], env)
+		case "eprint":
+			return nil, in.print(in.errw, ex.Args[0], env)
+		case "read_file":
+			p, err := in.textArg(ex.Args[0], env)
+			if err != nil {
+				return nil, err
+			}
+			data, err := os.ReadFile(p)
+			if err != nil {
+				return nil, &RuntimeError{Msg: "cannot read " + p, Line: ex.Line, Col: ex.Col}
+			}
+			return string(data), nil
+		case "write_file":
+			p, err := in.textArg(ex.Args[0], env)
+			if err != nil {
+				return nil, err
+			}
+			c, err := in.textArg(ex.Args[1], env)
+			if err != nil {
+				return nil, err
+			}
+			if err := os.WriteFile(p, []byte(c), 0o644); err != nil {
+				return nil, &RuntimeError{Msg: "cannot write " + p, Line: ex.Line, Col: ex.Col}
+			}
+			return nil, nil
+		case "args":
+			items := make([]Value, len(in.args))
+			for i, a := range in.args {
+				items[i] = a
+			}
+			return &List{Elem: ast.Type{Name: "text"}, Items: items}, nil
+		case "List":
+			return &List{}, nil
+		}
+	}
+
+	// Enum variant constructor: Shape.Circle(1.0).
+	if fe, ok := ex.Callee.(*ast.FieldExpr); ok {
+		if id, ok := fe.Base.(*ast.Ident); ok {
+			if _, isEnum := in.ck.Enums[id.Name]; isEnum {
+				fields := make([]Value, len(ex.Args))
+				for i, a := range ex.Args {
+					v, err := in.eval(a, env)
+					if err != nil {
+						return nil, err
+					}
+					fields[i] = deepCopy(read(v))
+				}
+				return &Enum{Type: id.Name, Variant: fe.Field, Fields: fields}, nil
+			}
+		}
+		// Method call: xs.push(v).
+		if id, ok := fe.Base.(*ast.Ident); ok {
+			if slot, found := env.lookup(id.Name); found {
+				if l, ok := read(*slot).(*List); ok && fe.Field == "push" {
+					v, err := in.eval(ex.Args[0], env)
+					if err != nil {
+						return nil, err
+					}
+					l.Items = append(l.Items, deepCopy(read(v)))
+					return nil, nil
+				}
+			}
+		}
+	}
+
+	// User function.
+	id, ok := ex.Callee.(*ast.Ident)
+	if !ok {
+		return nil, &RuntimeError{Msg: "unsupported call", Line: ex.Line, Col: ex.Col}
+	}
+	fd, ok := in.funcs[id.Name]
+	if !ok {
+		return nil, &RuntimeError{Msg: "call to undefined function " + id.Name, Line: ex.Line, Col: ex.Col}
+	}
+	argv := make([]Value, len(ex.Args))
+	for i, a := range ex.Args {
+		v, err := in.eval(a, env)
+		if err != nil {
+			return nil, err
+		}
+		// Reference parameters receive the borrow; value parameters a copy.
+		if i < len(fd.Params) && fd.Params[i].Type.Ptr {
+			argv[i] = v
+		} else {
+			argv[i] = deepCopy(read(v))
+		}
+	}
+	return in.callFunc(fd, argv)
+}
+
+func (in *interp) textArg(e ast.Expr, env *Env) (string, error) {
+	v, err := in.eval(e, env)
+	if err != nil {
+		return "", err
+	}
+	s, ok := read(v).(string)
+	if !ok {
+		line, col := e.Pos()
+		return "", &RuntimeError{Msg: "expected text", Line: line, Col: col}
+	}
+	return s, nil
+}
+
+// ---------- lvalues ----------
+
+// lvalue returns the slot an assignment target refers to.
+func (in *interp) lvalue(e ast.Expr, env *Env) (*Value, error) {
+	switch ex := e.(type) {
+	case *ast.Ident:
+		slot, ok := env.lookup(ex.Name)
+		if !ok {
+			return nil, &RuntimeError{Msg: "undefined name " + ex.Name, Line: ex.Line, Col: ex.Col}
+		}
+		return slot, nil
+	case *ast.FieldExpr:
+		base, err := in.eval(ex.Base, env)
+		if err != nil {
+			return nil, err
+		}
+		if s, ok := read(base).(*Struct); ok {
+			slot, ok := s.Fields[ex.Field]
+			if !ok {
+				slot = new(Value)
+				*slot = zeroAny()
+				s.Fields[ex.Field] = slot
+			}
+			return slot, nil
+		}
+	case *ast.IndexExpr:
+		base, err := in.eval(ex.Base, env)
+		if err != nil {
+			return nil, err
+		}
+		iv, err := in.eval(ex.Index, env)
+		if err != nil {
+			return nil, err
+		}
+		i := read(iv).(int64)
+		if l, ok := read(base).(*List); ok {
+			if i < 0 || int(i) >= len(l.Items) {
+				return nil, &RuntimeError{Msg: "list index out of range", Line: ex.Line, Col: ex.Col}
+			}
+			return &l.Items[i], nil
+		}
+	}
+	return nil, &RuntimeError{Msg: "invalid assignment target"}
+}
+
+// ---------- helpers ----------
+
+// read dereferences a borrow, if any.
+func read(v Value) Value {
+	for {
+		r, ok := v.(*Ref)
+		if !ok {
+			return v
+		}
+		v = *r.Slot
+	}
+}
+
+func deepCopy(v Value) Value {
+	switch x := v.(type) {
+	case *Struct:
+		fields := make(map[string]*Value, len(x.Fields))
+		for k, fv := range x.Fields {
+			slot := new(Value)
+			*slot = deepCopy(read(*fv))
+			fields[k] = slot
+		}
+		return &Struct{Type: x.Type, Fields: fields}
+	case *List:
+		items := make([]Value, len(x.Items))
+		for i, it := range x.Items {
+			items[i] = deepCopy(it)
+		}
+		return &List{Elem: x.Elem, Items: items}
+	case *Enum:
+		fields := make([]Value, len(x.Fields))
+		for i, fv := range x.Fields {
+			fields[i] = deepCopy(fv)
+		}
+		return &Enum{Type: x.Type, Variant: x.Variant, Fields: fields}
+	}
+	return v
+}
+
+func zeroValue(t ast.Type) Value {
+	switch t.Name {
+	case "int":
+		return int64(0)
+	case "float":
+		return float64(0)
+	case "bool":
+		return false
+	case "text":
+		return ""
+	case "List":
+		return &List{Elem: derefElem(t)}
+	}
+	return zeroAny()
+}
+
+func zeroAny() Value { return int64(0) }
+
+func derefElem(t ast.Type) ast.Type {
+	if t.Elem != nil {
+		return *t.Elem
+	}
+	return ast.Type{Name: "int"}
+}
+
+// print mirrors the C backend's formatting so differential tests can compare
+// byte-for-byte.
+func (in *interp) print(w io.Writer, arg ast.Expr, env *Env) error {
+	v, err := in.eval(arg, env)
+	if err != nil {
+		return err
+	}
+	switch x := read(v).(type) {
+	case int64:
+		fmt.Fprintf(w, "%d\n", x)
+	case float64:
+		fmt.Fprintf(w, "%s\n", formatFloat(x))
+	case bool:
+		if x {
+			fmt.Fprintln(w, "true")
+		} else {
+			fmt.Fprintln(w, "false")
+		}
+	case string:
+		fmt.Fprintf(w, "%s\n", x)
+	default:
+		return &RuntimeError{Msg: "cannot print this type"}
+	}
+	return nil
+}
+
+// formatFloat matches C's "%g" closely enough for the values our tests use.
+func formatFloat(f float64) string {
+	return strconv.FormatFloat(f, 'g', -1, 64)
+}
