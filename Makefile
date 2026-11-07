@@ -1,4 +1,4 @@
-.PHONY: build test fmt vet clean examples native diff interp
+.PHONY: build test fmt fmt-check vet clean examples native diff interp
 
 build:
 	go build -o bin/brick ./cmd/brick
@@ -18,6 +18,12 @@ examples: build
 		echo "=== $$f ==="; \
 		./bin/brick run "$$f"; \
 		echo; \
+	done
+
+# Check every example is canonically formatted (useful in CI).
+fmt-check: build
+	@for f in examples/*.brick; do \
+		./bin/brick fmt --check "$$f" || exit 1; \
 	done
 
 # Differential testing (§10): run every example through the interpreter and the

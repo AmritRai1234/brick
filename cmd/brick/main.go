@@ -29,6 +29,7 @@ import (
 	"brick/internal/ast"
 	"brick/internal/checker"
 	"brick/internal/codegen"
+	"brick/internal/format"
 	"brick/internal/interp"
 	"brick/internal/lexer"
 	"brick/internal/native"
@@ -81,6 +82,8 @@ func main() {
 		kind, src := lower(file, target, false)
 		_ = kind
 		fmt.Print(src)
+	case "fmt", "format":
+		os.Exit(fmtCmd(rest))
 	case "interp":
 		_, _, file, progArgs := parseArgs(rest)
 		prog := mustParse(readFile(file))
@@ -115,6 +118,58 @@ func main() {
 		fmt.Fprintf(os.Stderr, "brick: unknown command %q\n\n", cmd)
 		usage()
 		os.Exit(2)
+	}
+}
+
+// fmtCmd implements the formatter command:
+//
+//	brick fmt <file>            rewrite <file> in place
+//	brick fmt --stdout <file>   print the formatted source
+//	brick fmt --check <file>    exit 1 if <file> is not already formatted
+func fmtCmd(args []string) int {
+	stdout, check := false, false
+	var file string
+	for _, a := range args {
+		switch a {
+		case "--stdout", "-":
+			stdout = true
+		case "--check":
+			check = true
+		case "--":
+			// ignore
+		default:
+			if strings.HasPrefix(a, "-") {
+				fmt.Fprintf(os.Stderr, "brick: unknown fmt option %q\n", a)
+				return 2
+			}
+			file = a
+		}
+	}
+	if file == "" {
+		fmt.Fprintln(os.Stderr, "brick: fmt expected a .brick file")
+		return 2
+	}
+	src := readFile(file)
+	out := format.Source(src)
+	switch {
+	case stdout:
+		fmt.Print(out)
+		return 0
+	case check:
+		if out != src {
+			fmt.Fprintf(os.Stderr, "%s: not formatted\n", file)
+			return 1
+		}
+		fmt.Printf("%s: ok\n", file)
+		return 0
+	default:
+		if out == src {
+			fmt.Printf("%s: already formatted\n", file)
+			return 0
+		}
+		writeFile(file, out)
+		fmt.Printf("%s: reformatted\n", file)
+		return 0
 	}
 }
 
@@ -188,6 +243,7 @@ Usage:
   brick emit  <file.brick>             print the generated C
   brick asm   <file.brick>             print the native x86-64 assembly
   brick check <file.brick>             type-check only
+  brick fmt   <file.brick>             reformat in place (--stdout, --check)
   brick interp <file.brick> [args...]  run on the tree-walking interpreter
   brick diff  <file.brick> [args...]   compile+run and interpret, compare output
   brick tokens <file.brick>            print the token stream
