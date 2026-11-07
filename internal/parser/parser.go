@@ -126,6 +126,8 @@ func (p *Parser) parseStmt() ast.Stmt {
 		return p.parseImport()
 	case token.VAR:
 		return p.parseVarStmt()
+	case token.CONST:
+		return p.parseConstDecl()
 	case token.IF:
 		return p.parseIf()
 	case token.WHILE:
@@ -171,6 +173,20 @@ func (p *Parser) parseVarStmt() ast.Stmt {
 	name := p.expect(token.IDENT)
 	s := &ast.VarStmt{Name: name.Literal}
 	ast.SetBase(s, v)
+	if p.match(token.COLON) {
+		t := p.parseType()
+		s.Type = &t
+	}
+	p.expect(token.ASSIGN)
+	s.Value = p.parseExpr()
+	return s
+}
+
+func (p *Parser) parseConstDecl() ast.Stmt {
+	c := p.advance() // const
+	name := p.expect(token.IDENT)
+	s := &ast.ConstDecl{Name: name.Literal}
+	ast.SetBase(s, c)
 	if p.match(token.COLON) {
 		t := p.parseType()
 		s.Type = &t

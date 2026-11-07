@@ -273,3 +273,15 @@ func TestBuilderAndToTextCodegen(t *testing.T) {
 		}
 	}
 }
+
+func TestConstCodegenInlines(t *testing.T) {
+	out := gen(t, `
+	const MAX: int = 10
+	function main() { print(MAX) }`)
+	if !strings.Contains(out, "(long long)(10)") {
+		t.Errorf("const should be inlined as a literal\n%s", out)
+	}
+	if strings.Contains(out, "MAX") {
+		t.Errorf("const name should not appear in the output\n%s", out)
+	}
+}

@@ -14,6 +14,7 @@ type Generator struct {
 	types    map[ast.Expr]ast.Type
 	structs  map[string]*checker.StructInfo
 	enums    map[string]*checker.EnumInfo
+	consts   map[string]*checker.ConstInfo
 	b        strings.Builder
 	indent   int
 	tmpN     int
@@ -34,6 +35,7 @@ func Generate(prog *ast.Program, ck *checker.Checker) string {
 		types:   ck.Types,
 		structs: ck.Structs,
 		enums:   ck.Enums,
+		consts:  ck.Consts,
 	}
 	g.usesArgs = programUsesArgs(prog)
 	g.line("/*")
@@ -923,6 +925,9 @@ func (g *Generator) expr(e ast.Expr) string {
 		}
 		return "false"
 	case *ast.Ident:
+		if ci, ok := g.consts[ex.Name]; ok {
+			return g.expr(ci.Lit)
+		}
 		return ex.Name
 	case *ast.BinaryExpr:
 		if g.types[ex.Left].Name == "text" {

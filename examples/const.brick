@@ -1,0 +1,13 @@
+// Top-level constants: evaluated at compile time and inlined.
+const MAX_ROWS: int = 4
+const TITLE = "squares up to 4"   // a const value must be computable at compile time
+const SEP = " = "
+
+function main() {
+    print(TITLE)          // squares up to 4
+    var i = 1
+    while i <= MAX_ROWS {
+        print(to_text(i) + SEP + to_text(i * i))
+        i = i + 1
+    }
+}

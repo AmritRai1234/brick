@@ -218,3 +218,18 @@ func TestBuilder(t *testing.T) {
 	}`
 	mustRun(t, src, "0 1 4 9 \n8\n42")
 }
+
+func TestConst(t *testing.T) {
+	src := `
+	const MAX: int = 10
+	const NAME = "brick"
+	const GREETING = "hi, " + NAME
+	function main() {
+		print(MAX * 2)   // 20
+		print(GREETING)  // hi, brick
+		var i = 0
+		while i < MAX { i = i + 1 }
+		print(i)         // 10
+	}`
+	mustRun(t, src, "20\nhi, brick\n10")
+}

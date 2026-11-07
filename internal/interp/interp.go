@@ -250,7 +250,7 @@ func (in *interp) execStmt(s ast.Stmt, env *Env) error {
 	case *ast.FuncDecl:
 		in.funcs[st.Name] = st // forward/extern declarations
 		return nil
-	case *ast.StructDecl, *ast.EnumDecl, *ast.ImportStmt:
+	case *ast.StructDecl, *ast.EnumDecl, *ast.ImportStmt, *ast.ConstDecl:
 		return nil
 	}
 	return &RuntimeError{Msg: "unsupported statement", Line: line, Col: col}
@@ -341,11 +341,13 @@ func (in *interp) eval(e ast.Expr, env *Env) (Value, error) {
 	case *ast.BoolLit:
 		return ex.Value, nil
 	case *ast.Ident:
-		slot, ok := env.lookup(ex.Name)
-		if !ok {
-			return nil, &RuntimeError{Msg: "undefined name " + ex.Name, Line: line, Col: col}
+		if slot, ok := env.lookup(ex.Name); ok {
+			return *slot, nil
 		}
-		return *slot, nil
+		if ci, ok := in.ck.Consts[ex.Name]; ok {
+			return in.eval(ci.Lit, env)
+		}
+		return nil, &RuntimeError{Msg: "undefined name " + ex.Name, Line: line, Col: col}
 	case *ast.UnaryExpr:
 		return in.evalUnary(ex, env)
 	case *ast.BinaryExpr:

@@ -24,6 +24,12 @@ type FuncInfo struct {
 	Decl   *ast.FuncDecl
 }
 
+// ConstInfo is a compile-time constant: its type and its folded literal value.
+type ConstInfo struct {
+	Type ast.Type
+	Lit  ast.Expr // a literal node the code generator and interpreter can reuse
+}
+
 // StructInfo is a struct definition.
 type StructInfo struct {
 	Name   string
@@ -55,6 +61,7 @@ type Checker struct {
 	Funcs   map[string]*FuncInfo
 	Structs map[string]*StructInfo
 	Enums   map[string]*EnumInfo
+	Consts  map[string]*ConstInfo
 	Types   map[ast.Expr]ast.Type
 
 	scopes    []map[string]ast.Type
@@ -77,6 +84,7 @@ func Check(prog *ast.Program) (c *Checker, err error) {
 		Funcs:   map[string]*FuncInfo{},
 		Structs: map[string]*StructInfo{},
 		Enums:   map[string]*EnumInfo{},
+		Consts:  map[string]*ConstInfo{},
 		Types:   map[ast.Expr]ast.Type{},
 	}
 	defer func() {
@@ -183,6 +191,26 @@ func (c *Checker) collect(prog *ast.Program) {
 			}
 		}
 	}
+	// constants (evaluated left to right, so a const may reference earlier ones)
+	for _, s := range prog.Stmts {
+		cd, ok := s.(*ast.ConstDecl)
+		if !ok {
+			continue
+		}
+		if _, dup := c.Consts[cd.Name]; dup {
+			c.errorf(cd, "duplicate constant %q", cd.Name)
+		}
+		lit, t := c.evalConst(cd, cd.Value)
+		if cd.Type != nil {
+			decl := c.resolve(cd, *cd.Type)
+			if !decl.Equals(t) {
+				c.errorf(cd, "constant %s: value is %s, not %s (no implicit conversion)", cd.Name, t, decl)
+			}
+			t = decl
+		}
+		c.Consts[cd.Name] = &ConstInfo{Type: t, Lit: lit}
+	}
+
 	// functions
 	for _, s := range prog.Stmts {
 		fd, ok := s.(*ast.FuncDecl)
@@ -203,7 +231,7 @@ func (c *Checker) collect(prog *ast.Program) {
 	// top level must be declarations only
 	for _, s := range prog.Stmts {
 		switch s.(type) {
-		case *ast.FuncDecl, *ast.StructDecl, *ast.EnumDecl, *ast.ImportStmt:
+		case *ast.FuncDecl, *ast.StructDecl, *ast.EnumDecl, *ast.ImportStmt, *ast.ConstDecl:
 		default:
 			c.errorf(s, "only declarations are allowed at the top level (put code inside a function)")
 		}
@@ -350,8 +378,8 @@ func (c *Checker) checkStmt(s ast.Stmt) {
 	case *ast.MatchStmt:
 		c.checkMatch(st)
 
-	case *ast.FuncDecl, *ast.StructDecl:
-		c.errorf(s, "nested declarations are not allowed")
+	case *ast.FuncDecl, *ast.StructDecl, *ast.ConstDecl:
+		c.errorf(s, "nested declarations are not allowed (const belongs at the top level)")
 
 	default:
 		c.errorf(s, "unhandled statement")
@@ -359,6 +387,144 @@ func (c *Checker) checkStmt(s ast.Stmt) {
 }
 
 // ---------- expressions ----------
+
+// evalConst folds a constant expression to a literal node and its type. It
+// accepts literals, references to earlier constants, unary +/-/!, and binary
+// arithmetic, comparison and logical operators on those.
+func (c *Checker) evalConst(n ast.Node, e ast.Expr) (ast.Expr, ast.Type) {
+	switch ex := e.(type) {
+	case *ast.IntLit:
+		return ex, intT
+	case *ast.FloatLit:
+		return ex, floatT
+	case *ast.StringLit:
+		return ex, textT
+	case *ast.BoolLit:
+		return ex, boolT
+	case *ast.Ident:
+		ci, ok := c.Consts[ex.Name]
+		if !ok {
+			c.errorf(e, "%q is not a constant (a constant must be a literal or another constant)", ex.Name)
+		}
+		return ci.Lit, ci.Type
+	case *ast.UnaryExpr:
+		lit, t := c.evalConst(e, ex.Operand)
+		switch ex.Op {
+		case "-":
+			switch v := lit.(type) {
+			case *ast.IntLit:
+				return &ast.IntLit{Value: -v.Value}, intT
+			case *ast.FloatLit:
+				return &ast.FloatLit{Value: -v.Value}, floatT
+			}
+		case "!":
+			if b, ok := lit.(*ast.BoolLit); ok {
+				return &ast.BoolLit{Value: !b.Value}, boolT
+			}
+		}
+		_ = t
+		c.errorf(e, "operator %q cannot be applied to a constant of type %s", ex.Op, t)
+	case *ast.BinaryExpr:
+		ll, lt := c.evalConst(e, ex.Left)
+		rl, rt := c.evalConst(e, ex.Right)
+		return c.evalConstBinary(e, ex, ll, lt, rl, rt)
+	}
+	c.errorf(e, "value is not a compile-time constant")
+	return nil, voidT
+}
+
+func (c *Checker) evalConstBinary(n ast.Node, ex *ast.BinaryExpr, ll ast.Expr, lt ast.Type, rl ast.Expr, rt ast.Type) (ast.Expr, ast.Type) {
+	if li, ok := ll.(*ast.IntLit); ok {
+		if ri, ok := rl.(*ast.IntLit); ok {
+			a, b := li.Value, ri.Value
+			switch ex.Op {
+			case "+":
+				return &ast.IntLit{Value: a + b}, intT
+			case "-":
+				return &ast.IntLit{Value: a - b}, intT
+			case "*":
+				return &ast.IntLit{Value: a * b}, intT
+			case "/":
+				if b == 0 {
+					c.errorf(n, "division by zero in constant")
+				}
+				return &ast.IntLit{Value: a / b}, intT
+			case "%":
+				if b == 0 {
+					c.errorf(n, "division by zero in constant")
+				}
+				return &ast.IntLit{Value: a % b}, intT
+			case "==":
+				return &ast.BoolLit{Value: a == b}, boolT
+			case "!=":
+				return &ast.BoolLit{Value: a != b}, boolT
+			case "<":
+				return &ast.BoolLit{Value: a < b}, boolT
+			case "<=":
+				return &ast.BoolLit{Value: a <= b}, boolT
+			case ">":
+				return &ast.BoolLit{Value: a > b}, boolT
+			case ">=":
+				return &ast.BoolLit{Value: a >= b}, boolT
+			}
+		}
+	}
+	if lf, ok := ll.(*ast.FloatLit); ok {
+		if rf, ok := rl.(*ast.FloatLit); ok {
+			a, b := lf.Value, rf.Value
+			switch ex.Op {
+			case "+":
+				return &ast.FloatLit{Value: a + b}, floatT
+			case "-":
+				return &ast.FloatLit{Value: a - b}, floatT
+			case "*":
+				return &ast.FloatLit{Value: a * b}, floatT
+			case "/":
+				return &ast.FloatLit{Value: a / b}, floatT
+			case "==":
+				return &ast.BoolLit{Value: a == b}, boolT
+			case "!=":
+				return &ast.BoolLit{Value: a != b}, boolT
+			case "<":
+				return &ast.BoolLit{Value: a < b}, boolT
+			case "<=":
+				return &ast.BoolLit{Value: a <= b}, boolT
+			case ">":
+				return &ast.BoolLit{Value: a > b}, boolT
+			case ">=":
+				return &ast.BoolLit{Value: a >= b}, boolT
+			}
+		}
+	}
+	if ls, ok := ll.(*ast.StringLit); ok {
+		if rs, ok := rl.(*ast.StringLit); ok {
+			switch ex.Op {
+			case "+":
+				return &ast.StringLit{Value: ls.Value + rs.Value}, textT
+			case "==":
+				return &ast.BoolLit{Value: ls.Value == rs.Value}, boolT
+			case "!=":
+				return &ast.BoolLit{Value: ls.Value != rs.Value}, boolT
+			}
+		}
+	}
+	if lb, ok := ll.(*ast.BoolLit); ok {
+		if rb, ok := rl.(*ast.BoolLit); ok {
+			switch ex.Op {
+			case "&&":
+				return &ast.BoolLit{Value: lb.Value && rb.Value}, boolT
+			case "||":
+				return &ast.BoolLit{Value: lb.Value || rb.Value}, boolT
+			case "==":
+				return &ast.BoolLit{Value: lb.Value == rb.Value}, boolT
+			case "!=":
+				return &ast.BoolLit{Value: lb.Value != rb.Value}, boolT
+			}
+		}
+	}
+	c.errorf(n, "unsupported constant expression (%s %s %s)", lt, ex.Op, rt)
+	return nil, voidT
+}
 
 func (c *Checker) infer(e ast.Expr) ast.Type {
 	t := c.inferInner(e)
@@ -379,6 +545,9 @@ func (c *Checker) inferInner(e ast.Expr) ast.Type {
 	case *ast.Ident:
 		if t, ok := c.lookupVar(ex.Name); ok {
 			return t
+		}
+		if ci, ok := c.Consts[ex.Name]; ok {
+			return ci.Type
 		}
 		c.errorf(ex, "undefined name %q", ex.Name)
 	case *ast.UnaryExpr:

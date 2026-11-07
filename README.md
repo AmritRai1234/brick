@@ -222,7 +222,8 @@ Mapped to the roadmap in the spec (§15):
 
 - [x] **1. Hello world** — reads a `.brick` file, writes equivalent C
 - [x] **2. Variables and math** — `var x = 2 + 3`, `print(x)`; `int`, `float`,
-      `bool`, `text`; arithmetic, comparison and logical operators
+      `bool`, `text`; arithmetic, comparison and logical operators; top-level
+      `const NAME = <compile-time expression>` (folded and inlined)
 - [x] **3. `if` / `else` and `while`**, plus `break` and `continue` (which
       leave / advance the innermost loop, even from inside a `match`)
 - [x] **4. `function`** — typed parameters and return types, recursion,
@@ -314,17 +315,17 @@ Brick-written compiler would need.
 - `import "path"` — pull another file's declarations into the program
 - `Builder()` (`add`, `build`) and `to_text(int)` — assemble output without
   quadratic `+`
+- top-level `const` — computed at compile time and inlined
 - `arena { ... }` for bulk allocation
 - output via `print` / `eprint`
 
 **Still missing (in rough priority order)**
 
-1. top-level `const` (and maybe `var`) — for keyword tables and similar.
-2. `for x in xs { ... }` — pure sugar the spec already describes as a rewrite
+1. `for x in xs { ... }` — pure sugar the spec already describes as a rewrite
    into `while` (§5).
-3. character literals (`'a'`) — today `s[i]` yields an `int` byte, which works
+2. character literals (`'a'`) — today `s[i]` yields an `int` byte, which works
    but reads poorly.
-4. `to_text` for `float` and `bool` — today it takes only an `int`.
+3. `to_text` for `float` and `bool` — today it takes only an `int`.
 
 Each will land the same way as the features above: implemented across the lexer
 /parser/checker/codegen/interpreter, with an example that `make diff` proves the

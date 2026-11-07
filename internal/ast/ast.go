@@ -251,6 +251,17 @@ type FuncDecl struct {
 	Extern     bool
 }
 
+// ConstDecl is a top-level named constant. Its value must be computable at
+// compile time; the compiler inlines it.
+type ConstDecl struct {
+	base
+	Name  string
+	Type  *Type // optional explicit type
+	Value Expr
+}
+
+func (*ConstDecl) stmtNode() {}
+
 func (*FuncDecl) stmtNode() {}
 
 type Field struct {
@@ -419,6 +430,14 @@ func dumpStmt(b *strings.Builder, s Stmt, d int) {
 		}
 		b.WriteString("\n")
 		dumpStmt(b, st.Body, d+1)
+	case *ConstDecl:
+		indent(b, d)
+		b.WriteString("Const " + st.Name)
+		if st.Type != nil {
+			b.WriteString(": " + st.Type.String())
+		}
+		b.WriteString("\n")
+		dumpExpr(b, st.Value, d+1)
 	case *StructDecl:
 		indent(b, d)
 		b.WriteString("Struct " + st.Name + " { ")

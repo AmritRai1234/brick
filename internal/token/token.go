@@ -17,6 +17,7 @@ const (
 
 	// keywords
 	VAR
+	CONST
 	FUNCTION
 	IF
 	ELSE
@@ -68,7 +69,7 @@ const (
 var names = map[Type]string{
 	ILLEGAL: "ILLEGAL", EOF: "EOF", NEWLINE: "NEWLINE",
 	INT: "INT", FLOAT: "FLOAT", STRING: "STRING", IDENT: "IDENT",
-	VAR: "var", FUNCTION: "function", IF: "if", ELSE: "else",
+	VAR: "var", CONST: "const", FUNCTION: "function", IF: "if", ELSE: "else",
 	WHILE: "while", BREAK: "break", CONTINUE: "continue",
 	RETURN: "return", STRUCT: "struct", ENUM: "enum",
 	MATCH: "match", ARENA: "arena", IMPORT: "import", EXTERN: "extern",
@@ -90,6 +91,7 @@ func (t Type) String() string {
 
 var keywords = map[string]Type{
 	"var":      VAR,
+	"const":    CONST,
 	"function": FUNCTION,
 	"if":       IF,
 	"else":     ELSE,
