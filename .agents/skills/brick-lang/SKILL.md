@@ -106,6 +106,17 @@ program are usually enough; run the full ladder before committing.
    string, so `"` and `\` need escaping.
 5. **Emitted C must stay readable and warning-free**: K&R braces, `/* */`
    comments, `static inline`, named constants, `-Wall -Wextra` clean.
+6. **Every identifier that comes from a Brick source goes through `cname`.**
+   `cReservedNames` (`internal/codegen/codegen.go`) and `cReservedNames`
+   (`selfhost/codegen.brick`) are the *same list, word for word*: C keywords,
+   the five always-included headers, and the `brick_*` runtime. A reserved
+   name is written as `bx_<name>` in the C output. If you add an emitter site
+   that writes a name (a new declaration kind, a new expression form), it must
+   call `cname` too, or a program named after a C word emits C that will not
+   compile. `extern` function names are the exception: they name real C
+   symbols, so they are never renamed. The Go list is a raw string with
+   newlines; the Brick one must be a **single line** because the Brick emitter
+   does not fold concatenated string constants.
 
 ## Adding a language feature or builtin — the full checklist
 
@@ -170,6 +181,10 @@ change both — in which case change both, and let `make selfhost` and
   conversions (there are no implicit ones).
 - The interpreter is a second implementation: anything you rely on must behave
   the same there (`brick diff`), or examples will fail.
+- Names C owns (`double`, `long`, `printf`, `strlen`, `size_t`, `case`, …) are
+  legal Brick names; the emitter writes `bx_double` and friends. Type names
+  (`int`, `float`, `bool`, `text`, `bytes`, `void`) and builtins (`print`,
+  `exit`, `slice`, …) are not: those are errors. `examples/reserved.brick`.
 - **`text.len` and `slice(text, ...)` are `strlen`.** A `text` is a plain
   `const char *`, so length is recomputed every time it is asked for. Never read
   `.len` of a big text inside a per-character/per-token loop and never slice a

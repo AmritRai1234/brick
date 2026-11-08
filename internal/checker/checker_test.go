@@ -473,3 +473,25 @@ func TestReadDirAndIsDirBuiltins(t *testing.T) {
 		}
 	}
 }
+
+func TestStructAndEnumCannotShadowBuiltinTypes(t *testing.T) {
+	for _, src := range []string{
+		`struct int { x: int } function main() { }`,
+		`enum text { A(int) } function main() { }`,
+	} {
+		if _, err := check(t, src); err == nil {
+			t.Errorf("want an error for: %s", src)
+		}
+	}
+}
+
+func TestFunctionCannotShadowBuiltins(t *testing.T) {
+	for _, src := range []string{
+		`function print(x: int) { } function main() { }`,
+		`function getenv(a: text) -> text { return a } function main() { }`,
+	} {
+		if _, err := check(t, src); err == nil {
+			t.Errorf("want an error for: %s", src)
+		}
+	}
+}

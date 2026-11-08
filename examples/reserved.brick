@@ -1,0 +1,49 @@
+// Names that C already owns are allowed in Brick.
+//
+// C gives us a lot of short, obvious words: the keywords (int, long, struct,
+// ...) and everything in <stdio.h>, <stdlib.h>, <string.h>, <stdint.h> and
+// <stdbool.h> (printf, exit, strlen, size_t, ...). Brick always includes those
+// five headers, so those names are spoken for inside the generated C.
+//
+// Brick keeps your names anyway. Where a name is one of them, the C that comes
+// out writes "bx_" in front of it, so the two can never clash. Run
+// `brick emit examples/reserved.brick` to see it happen: the struct below
+// becomes `bx_long`, its fields become `bx_long`/`bx_printf`, and the enum
+// becomes `bx_size_t`.
+
+struct long {
+    long: int,
+    printf: int,
+}
+
+enum size_t {
+    Small(int),
+    Big(int),
+}
+
+// A function named after a C library function.
+function double(n: int) -> int {
+    return n * 2
+}
+
+// A parameter named after a C keyword.
+function describe(struct_size: int) -> text {
+    return "count: " + to_text(struct_size)
+}
+
+function main() {
+    // A local variable named after a C library function.
+    var strlen = 3
+
+    var pair = long{ long: 21, printf: strlen }
+
+    print(double(pair.long))
+    print(pair.printf)
+    print(describe(strlen))
+
+    var tag = size_t.Small(7)
+    match tag {
+        size_t.Small(x) => print(x),
+        size_t.Big(y) => print(y),
+    }
+}

@@ -135,6 +135,30 @@ func (c *Checker) resolve(n ast.Node, t ast.Type) ast.Type {
 	return t
 }
 
+// isBuiltinTypeName reports whether name is one of the type names the language
+// itself provides. A struct or enum may not take one: the name would be
+// ambiguous everywhere a type is expected.
+func isBuiltinTypeName(name string) bool {
+	switch name {
+	case "int", "float", "bool", "text", "bytes", "void":
+		return true
+	}
+	return false
+}
+
+// isBuiltinFuncName reports whether name is one of the functions the language
+// itself provides, such as print or exit. Declaring a function with one of
+// these names would be silently ignored at every call site.
+func isBuiltinFuncName(name string) bool {
+	switch name {
+	case "print", "print_bytes", "eprint", "exit", "system", "getenv",
+		"read_dir", "is_dir", "read_file", "write_file", "slice", "args",
+		"to_text", "to_bytes":
+		return true
+	}
+	return false
+}
+
 // ---------- pass 1: declarations ----------
 
 func (c *Checker) collect(prog *ast.Program) {
@@ -146,6 +170,9 @@ func (c *Checker) collect(prog *ast.Program) {
 		}
 		if _, dup := c.Structs[sd.Name]; dup {
 			c.errorf(sd, "duplicate struct %q", sd.Name)
+		}
+		if isBuiltinTypeName(sd.Name) {
+			c.errorf(sd, "cannot name a struct %q: %s is a built-in type", sd.Name, sd.Name)
 		}
 		si := &StructInfo{Name: sd.Name, Fields: map[string]ast.Type{}, Decl: sd}
 		for _, f := range sd.Fields {
@@ -168,6 +195,9 @@ func (c *Checker) collect(prog *ast.Program) {
 		}
 		if _, dup := c.Structs[ed.Name]; dup {
 			c.errorf(ed, "name %q is already a struct", ed.Name)
+		}
+		if isBuiltinTypeName(ed.Name) {
+			c.errorf(ed, "cannot name an enum %q: %s is a built-in type", ed.Name, ed.Name)
 		}
 		ei := &EnumInfo{Name: ed.Name, Variants: map[string]ast.Variant{}, Decl: ed}
 		for _, v := range ed.Variants {
@@ -220,6 +250,9 @@ func (c *Checker) collect(prog *ast.Program) {
 		}
 		if _, dup := c.Funcs[fd.Name]; dup {
 			c.errorf(fd, "duplicate function %q", fd.Name)
+		}
+		if isBuiltinFuncName(fd.Name) {
+			c.errorf(fd, "cannot name a function %q: %s is a built-in function", fd.Name, fd.Name)
 		}
 		for _, p := range fd.Params {
 			c.resolve(fd, p.Type)

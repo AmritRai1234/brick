@@ -876,6 +876,64 @@ func (g *Generator) line(s string) {
 	g.b.WriteByte('\n')
 }
 
+// ---------- names ----------
+
+// cReserved lists the identifiers C already owns in every file we generate: the
+// C keywords, the names from <stdint.h>, <stdbool.h>, <stdio.h>, <stdlib.h> and
+// <string.h> (all five headers are always included), and Brick's own runtime
+// symbols.
+//
+// A Brick program may use any of these as a name. When it does, the emitter
+// writes "bx_" in front of the name in the C it produces, so the two never meet.
+// Programs that avoid these names generate exactly the C they did before.
+const cReservedNames = `
+	FILE NULL _Alignas _Alignof _Atomic _Bool _Complex _Generic _Imaginary
+	_Noreturn _Static_assert _Thread_local abort abs atexit atof atoi atol atoll
+	auto bool break brick_alloc brick_arena_enter brick_arena_leave
+	brick_arena_raw brick_arena_top brick_argc brick_args brick_argv
+	brick_bool_to_text brick_builder_add brick_builder_add_int
+	brick_builder_build brick_builder_new brick_builder_reserve brick_bytes_at
+	brick_bytes_eq brick_bytes_from_list brick_bytes_new brick_bytes_to_text
+	brick_float_to_text brick_getenv brick_int_to_text brick_is_dir
+	brick_list_at brick_list_grow brick_list_new brick_list_push brick_map_find
+	brick_map_get brick_map_get_must brick_map_has brick_map_hash brick_map_new
+	brick_map_rehash brick_map_set brick_map_value brick_name_compare
+	brick_panic_index brick_panic_memory brick_print_bytes brick_push_value
+	brick_read_dir brick_read_file brick_resize brick_run brick_saved_argc
+	brick_saved_argv brick_text_concat brick_text_slice brick_to_bytes
+	brick_write_file bsearch calloc case char clearerr const continue default
+	div do double else enum exit extern fclose feof ferror fflush fgetc fgetpos
+	fgets float fopen for fpos_t fprintf fputc fputs fread free freopen fscanf
+	fseek fsetpos ftell fwrite getc getchar getenv goto if inline int int16_t
+	int32_t int64_t int8_t intmax_t intptr_t labs ldiv llabs long malloc mblen
+	mbstowcs mbtowc memchr memcmp memcpy memmove memset perror printf putc
+	putchar puts qsort rand realloc register remove rename restrict return
+	rewind scanf setbuf setvbuf short signed size_t sizeof snprintf sprintf
+	srand sscanf static stderr stdin stdout strcat strchr strcmp strcoll strcpy
+	strcspn strerror strlen strncat strncmp strncpy strpbrk strrchr strspn
+	strstr strtod strtof strtok strtol strtold strtoll strtoul strtoull struct
+	strxfrm switch system tmpfile tmpnam typedef uint16_t uint32_t uint64_t
+	uint8_t uintmax_t uintptr_t ungetc union unsigned vfprintf vfscanf void
+	volatile vprintf vscanf vsnprintf vsprintf vsscanf wchar_t wcstombs wctomb
+	while
+`
+
+var cReserved = func() map[string]bool {
+	m := make(map[string]bool, 256)
+	for _, name := range strings.Fields(cReservedNames) {
+		m[name] = true
+	}
+	return m
+}()
+
+// cname maps one Brick name to the identifier written into the C output.
+func cname(name string) string {
+	if cReserved[name] {
+		return "bx_" + name
+	}
+	return name
+}
+
 func (g *Generator) ctype(t ast.Type) string {
 	if t.Ptr {
 		return g.ctype(ast.Type{Name: t.Name}) + "*"
@@ -900,7 +958,7 @@ func (g *Generator) ctype(t ast.Type) string {
 	case "void":
 		return "void"
 	default:
-		return t.Name // struct
+		return cname(t.Name) // struct
 	}
 }
 
@@ -912,14 +970,14 @@ func (g *Generator) emitForwardStructs(prog *ast.Program) {
 		if !ok {
 			continue
 		}
-		g.line(fmt.Sprintf("typedef struct %s %s;", sd.Name, sd.Name))
+		g.line(fmt.Sprintf("typedef struct %s %s;", cname(sd.Name), cname(sd.Name)))
 	}
 	for _, s := range prog.Stmts {
 		ed, ok := s.(*ast.EnumDecl)
 		if !ok {
 			continue
 		}
-		g.line(fmt.Sprintf("typedef struct %s %s;", ed.Name, ed.Name))
+		g.line(fmt.Sprintf("typedef struct %s %s;", cname(ed.Name), cname(ed.Name)))
 	}
 	g.line("")
 }
@@ -934,18 +992,18 @@ func (g *Generator) emitEnums(prog *ast.Program) {
 		consts := make([]string, len(ed.Variants))
 		hasPayload := false
 		for i, v := range ed.Variants {
-			consts[i] = fmt.Sprintf("%s_%s = %d", ed.Name, v.Name, i)
+			consts[i] = fmt.Sprintf("%s_%s = %d", cname(ed.Name), cname(v.Name), i)
 			if len(v.Fields) > 0 {
 				hasPayload = true
 			}
 		}
 		g.line(fmt.Sprintf("enum { %s };", strings.Join(consts, ", ")))
 		if !hasPayload {
-			g.line(fmt.Sprintf("struct %s { int tag; };", ed.Name))
+			g.line(fmt.Sprintf("struct %s { int tag; };", cname(ed.Name)))
 			g.line("")
 			continue
 		}
-		g.line(fmt.Sprintf("struct %s {", ed.Name))
+		g.line(fmt.Sprintf("struct %s {", cname(ed.Name)))
 		g.indent++
 		g.line("int tag;")
 		g.line("union {")
@@ -958,7 +1016,7 @@ func (g *Generator) emitEnums(prog *ast.Program) {
 			for i, ft := range v.Fields {
 				fields[i] = fmt.Sprintf("%s payload_%d;", g.ctype(ft), i)
 			}
-			g.line(fmt.Sprintf("struct { %s } %s;", strings.Join(fields, " "), v.Name))
+			g.line(fmt.Sprintf("struct { %s } %s;", strings.Join(fields, " "), cname(v.Name)))
 		}
 		g.indent--
 		g.line("} u;")
@@ -974,10 +1032,10 @@ func (g *Generator) emitStructs(prog *ast.Program) {
 		if !ok {
 			continue
 		}
-		g.b.WriteString(fmt.Sprintf("struct %s {\n", sd.Name))
+		g.b.WriteString(fmt.Sprintf("struct %s {\n", cname(sd.Name)))
 		g.indent++
 		for _, f := range sd.Fields {
-			g.line(fmt.Sprintf("%s %s;", g.ctype(f.Type), f.Name))
+			g.line(fmt.Sprintf("%s %s;", g.ctype(f.Type), cname(f.Name)))
 		}
 		g.indent--
 		g.line("};")
@@ -998,7 +1056,11 @@ func (g *Generator) emitPrototypes(prog *ast.Program) {
 		if fd.Extern {
 			linkage = "" // defined in C
 		}
-		g.line(fmt.Sprintf("%s%s %s(%s);", linkage, g.ctype(fd.ReturnType), fd.Name, g.paramList(fd)))
+		name := fd.Name
+		if !fd.Extern {
+			name = cname(name)
+		}
+		g.line(fmt.Sprintf("%s%s %s(%s);", linkage, g.ctype(fd.ReturnType), name, g.paramList(fd)))
 	}
 	g.line("")
 }
@@ -1012,7 +1074,7 @@ func (g *Generator) paramList(fd *ast.FuncDecl) string {
 	}
 	parts := make([]string, len(fd.Params))
 	for i, p := range fd.Params {
-		parts[i] = g.ctype(p.Type) + " " + p.Name
+		parts[i] = g.ctype(p.Type) + " " + cname(p.Name)
 	}
 	return strings.Join(parts, ", ")
 }
@@ -1030,7 +1092,7 @@ func (g *Generator) emitBodies(prog *ast.Program) {
 
 func (g *Generator) emitFunc(fd *ast.FuncDecl) {
 	ret := g.ctype(fd.ReturnType)
-	name := fd.Name
+	name := cname(fd.Name)
 	params := g.paramList(fd)
 	linkage := "static "
 	if fd.Name == "main" {
@@ -1069,7 +1131,7 @@ func (g *Generator) emitStmt(s ast.Stmt) {
 		if st.Type != nil {
 			t = *st.Type
 		}
-		g.line(fmt.Sprintf("%s %s = %s;", g.ctype(t), st.Name, g.expr(st.Value)))
+		g.line(fmt.Sprintf("%s %s = %s;", g.ctype(t), cname(st.Name), g.expr(st.Value)))
 
 	case *ast.AssignStmt:
 		g.line(fmt.Sprintf("%s = %s;", g.expr(st.Target), g.expr(st.Value)))
@@ -1212,7 +1274,7 @@ func (g *Generator) emitMatch(st *ast.MatchStmt) {
 		g.line(fmt.Sprintf("case %d: {", idx))
 		g.indent++
 		for j, b := range arm.Pattern.Binds {
-			g.line(fmt.Sprintf("%s %s = %s.u.%s.payload_%d;", g.ctype(v.Fields[j]), b, tmp, arm.Pattern.Variant, j))
+			g.line(fmt.Sprintf("%s %s = %s.u.%s.payload_%d;", g.ctype(v.Fields[j]), cname(b), tmp, cname(arm.Pattern.Variant), j))
 		}
 		g.emitStmt(arm.Body)
 		g.line("break;")
@@ -1267,7 +1329,7 @@ func (g *Generator) expr(e ast.Expr) string {
 		if ci, ok := g.consts[ex.Name]; ok {
 			return g.expr(ci.Lit)
 		}
-		return ex.Name
+		return cname(ex.Name)
 	case *ast.BinaryExpr:
 		if g.types[ex.Left].Name == "text" {
 			switch ex.Op {
@@ -1422,7 +1484,7 @@ func (g *Generator) expr(e ast.Expr) string {
 		if bt.Ptr {
 			op = "->"
 		}
-		return fmt.Sprintf("(%s)%s%s", g.expr(ex.Base), op, ex.Field)
+		return fmt.Sprintf("(%s)%s%s", g.expr(ex.Base), op, cname(ex.Field))
 	case *ast.IndexExpr:
 		bt := g.types[ex.Base]
 		if bt.Name == "List" {
@@ -1438,13 +1500,13 @@ func (g *Generator) expr(e ast.Expr) string {
 		return "/* cannot index this */"
 	case *ast.StructLit:
 		if len(ex.Fields) == 0 {
-			return fmt.Sprintf("(%s){0}", ex.Name)
+			return fmt.Sprintf("(%s){0}", cname(ex.Name))
 		}
 		parts := make([]string, len(ex.Fields))
 		for i, f := range ex.Fields {
-			parts[i] = fmt.Sprintf(".%s = %s", f.Name, g.expr(f.Value))
+			parts[i] = fmt.Sprintf(".%s = %s", cname(f.Name), g.expr(f.Value))
 		}
-		return fmt.Sprintf("(%s){ %s }", ex.Name, strings.Join(parts, ", "))
+		return fmt.Sprintf("(%s){ %s }", cname(ex.Name), strings.Join(parts, ", "))
 	}
 	return "/* unhandled expr */"
 }
@@ -1453,13 +1515,13 @@ func (g *Generator) enumVariant(ei *checker.EnumInfo, variant string, args []ast
 	idx := ei.Index(variant)
 	v := ei.Variants[variant]
 	if len(v.Fields) == 0 {
-		return fmt.Sprintf("(%s){ .tag = %d }", ei.Name, idx)
+		return fmt.Sprintf("(%s){ .tag = %d }", cname(ei.Name), idx)
 	}
 	inner := make([]string, len(args))
 	for i, a := range args {
 		inner[i] = fmt.Sprintf(".payload_%d = %s", i, g.expr(a))
 	}
-	return fmt.Sprintf("(%s){ .tag = %d, .u.%s = { %s } }", ei.Name, idx, variant, strings.Join(inner, ", "))
+	return fmt.Sprintf("(%s){ .tag = %d, .u.%s = { %s } }", cname(ei.Name), idx, cname(variant), strings.Join(inner, ", "))
 }
 
 func (g *Generator) printCall(stream string, arg ast.Expr) string {
@@ -1719,7 +1781,7 @@ func (g *Generator) emitFor(st *ast.ForStmt) {
 	g.line(fmt.Sprintf("int64_t %s = 0;", idx))
 	g.line(fmt.Sprintf("while (%s < %s) {", idx, cond))
 	g.indent++
-	g.line(fmt.Sprintf("%s %s = %s;", g.ctype(et), st.Var, elem))
+	g.line(fmt.Sprintf("%s %s = %s;", g.ctype(et), cname(st.Var), elem))
 	for _, inner := range st.Body.Stmts {
 		g.emitStmt(inner)
 	}

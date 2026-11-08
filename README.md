@@ -328,6 +328,16 @@ Mapped to the roadmap in the spec (§15):
 - Borrows are types (`&Point`), so a `&mut Point` cannot be passed where an
   `int` is expected, and vice versa.
 - Only declarations are allowed at the top level; code lives in a function.
+- Names that C already owns are yours to use. Brick emits C, and that C always
+  includes `<stdint.h>`, `<stdbool.h>`, `<stdio.h>`, `<stdlib.h>` and
+  `<string.h>`, so names such as `double`, `long`, `printf`, `strlen`, `size_t`
+  or `struct` would normally clash. They do not: the emitter writes `bx_` in
+  front of them (`double` becomes `bx_double`), so a program may name a
+  function `double` and a field `printf`. Two names remain unavailable because
+  the language itself uses them — the type names (`int`, `float`, `bool`,
+  `text`, `bytes`, `void`) and the built-in functions (`print`, `exit`,
+  `slice`, …); both produce a clear diagnostic instead of broken C.
+  `examples/reserved.brick` is the demonstration.
 
 ### Backend coverage
 
@@ -462,7 +472,8 @@ away:
 | `v0.3.25` | `AGENTS.md` + the `brick-lang` agent skill: invariants, verification ladder, debugging playbook |
 | `v0.3.26` | self-hosted compiler is linear again: cache `text.len` in the scanner, stop slicing the source per token (~70x on large inputs) |
 | `v0.3.27` | four-way HTTP server benchmark (`make bench-server`): Brick matches hand-written C at ~20–26 µs of CPU per request; Go ~1.6–2.2x, Rust ~1.1–1.3x |
-| `v0.3.28` | `docs/learn/index.html`: a from-zero, twelve-lesson guide to Brick for people who have never written code (current) |
+| `v0.3.28` | `docs/learn/index.html`: a from-zero, twelve-lesson guide to Brick for people who have never written code |
+| `v0.3.29` | C's names are no longer a trap: a Brick program may declare `double`, `printf`, `strlen`, `size_t`, `long`, … and the emitter writes them as `bx_…` in the C it produces (`examples/reserved.brick`) (current) |
 
 ```sh
 git tag                     # list the tags

@@ -1050,6 +1050,39 @@ function main() {
         </div>
       </div>
 
+      <div class="note tip">
+        <strong>Can I call it <code class="inline">double</code>?</strong> Yes.
+        <code class="inline">double</code> is a word C uses for its own kind of number, and
+        Brick turns your program into C, so you might expect a clash. There isn't one.
+        Brick quietly writes <code class="inline">bx_double</code> in the C it produces and
+        leaves your source alone:
+
+        <div class="code">
+          <pre><code>function double(n: int) -&gt; int {
+    return n * 2
+}
+
+function main() {
+    print(double(21))
+}</code></pre>
+        </div>
+
+        <p>Output: <code class="inline">42</code>. The same is true for the other short,
+          obvious names C owns — <code class="inline">long</code>,
+          <code class="inline">printf</code>, <code class="inline">strlen</code>,
+          <code class="inline">size_t</code>, and a few dozen more. Name things whatever
+          reads best.</p>
+
+        <p>Two kinds of name are still off limits, because the language itself already uses
+          them: the type names (<code class="inline">int</code>,
+          <code class="inline">float</code>, <code class="inline">bool</code>,
+          <code class="inline">text</code>, <code class="inline">bytes</code>,
+          <code class="inline">void</code>) and the built-in functions
+          (<code class="inline">print</code>, <code class="inline">exit</code>,
+          <code class="inline">slice</code>, …). You get a clear message if you try:
+          <code class="inline">cannot name a struct "int": int is a built-in type</code>.</p>
+      </div>
+
       <div class="quiz" data-quiz>
         <p class="q">What does <code class="inline">-&gt; int</code> after a function's parameters mean?</p>
         <div class="opts">
@@ -1693,10 +1726,13 @@ function main() {
             <td>The program stops with an out-of-range error. Positions are 0…len-1.</td>
           </tr>
           <tr>
-            <td><code>function double(n: int)</code></td>
-            <td>Brick writes C, so a handful of names are taken by C itself
-              (<code>double</code>, <code>float</code>, <code>case</code>, <code>static</code>, …).
-              Pick another name: <code>twice</code>, <code>half</code>, <code>average</code>.</td>
+            <td><code>struct int { x: int }</code> or <code>function print(x: int)</code></td>
+            <td><code>int</code> is a type the language already has, and
+              <code>print</code> is a function it already has, so neither can be reused.
+              The message says so in words:
+              <code>cannot name a struct "int": int is a built-in type</code>.
+              (<code>double</code>, <code>long</code> and other C words are fine — Brick
+              marks them with <code>bx_</code> in the C it writes.)</td>
           </tr>
           <tr>
             <td>a function with <code>-&gt; int</code> that never returns</td>

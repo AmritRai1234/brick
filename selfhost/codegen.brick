@@ -74,6 +74,59 @@ function join(l: List(text), sep: text) -> text {
     return b.build()
 }
 
+// ---------- names ----------
+//
+// C already owns a great many short, obvious names in every file we generate:
+// the C keywords (int, long, struct, ...), everything from <stdint.h>,
+// <stdbool.h>, <stdio.h>, <stdlib.h> and <string.h> (all five are always
+// included), and Brick's own runtime symbols. A Brick program is allowed to
+// use any of them. When it does, the name is written with "bx_" in front in
+// the C output, so the two never meet.
+//
+// This list must stay identical to cReservedNames in internal/codegen.
+// One space-separated line: the Brick emitter does not fold constant
+// concatenation, so an unbroken literal keeps the two emitters identical.
+const cReservedNames = " FILE NULL _Alignas _Alignof _Atomic _Bool _Complex _Generic _Imaginary _Noreturn _Static_assert _Thread_local abort abs atexit atof atoi atol atoll auto bool break brick_alloc brick_arena_enter brick_arena_leave brick_arena_raw brick_arena_top brick_argc brick_args brick_argv brick_bool_to_text brick_builder_add brick_builder_add_int brick_builder_build brick_builder_new brick_builder_reserve brick_bytes_at brick_bytes_eq brick_bytes_from_list brick_bytes_new brick_bytes_to_text brick_float_to_text brick_getenv brick_int_to_text brick_is_dir brick_list_at brick_list_grow brick_list_new brick_list_push brick_map_find brick_map_get brick_map_get_must brick_map_has brick_map_hash brick_map_new brick_map_rehash brick_map_set brick_map_value brick_name_compare brick_panic_index brick_panic_memory brick_print_bytes brick_push_value brick_read_dir brick_read_file brick_resize brick_run brick_saved_argc brick_saved_argv brick_text_concat brick_text_slice brick_to_bytes brick_write_file bsearch calloc case char clearerr const continue default div do double else enum exit extern fclose feof ferror fflush fgetc fgetpos fgets float fopen for fpos_t fprintf fputc fputs fread free freopen fscanf fseek fsetpos ftell fwrite getc getchar getenv goto if inline int int16_t int32_t int64_t int8_t intmax_t intptr_t labs ldiv llabs long malloc mblen mbstowcs mbtowc memchr memcmp memcpy memmove memset perror printf putc putchar puts qsort rand realloc register remove rename restrict return rewind scanf setbuf setvbuf short signed size_t sizeof snprintf sprintf srand sscanf static stderr stdin stdout strcat strchr strcmp strcoll strcpy strcspn strerror strlen strncat strncmp strncpy strpbrk strrchr strspn strstr strtod strtof strtok strtol strtold strtoll strtoul strtoull struct strxfrm switch system tmpfile tmpnam typedef uint16_t uint32_t uint64_t uint8_t uintmax_t uintptr_t ungetc union unsigned vfprintf vfscanf void volatile vprintf vscanf vsnprintf vsprintf vsscanf wchar_t wcstombs wctomb while ";
+
+// cname maps one Brick name to the identifier written into the C output.
+function cname(name: text) -> text {
+    if isReservedWord(name) {
+        return "bx_" + name
+    }
+    return name
+}
+
+// isReservedWord reports whether name is one whole word in cReservedNames.
+// The table has one leading and one trailing space, so every entry can be
+// found as " name " without allocating a slice per candidate.
+function isReservedWord(name: text) -> bool {
+    var n = name.len
+    if n == 0 {
+        return false
+    }
+    var t = cReservedNames
+    var tl = t.len
+    var i = 0
+    while i + n + 1 <= tl {
+        if t[i] == ' ' {
+            var k = 0
+            var same = true
+            while k < n {
+                if t[i + 1 + k] != name[k] {
+                    same = false
+                    break
+                }
+                k = k + 1
+            }
+            if same && t[i + 1 + n] == ' ' {
+                return true
+            }
+        }
+        i = i + 1
+    }
+    return false
+}
+
 // ---------- C types ----------
 
 function ctype(t: text) -> text {
@@ -116,7 +169,7 @@ function ctype(t: text) -> text {
     if base == "void" {
         return "void"
     }
-    return base
+    return cname(base)
 }
 
 // ---------- declarations ----------
@@ -126,7 +179,7 @@ function emitForwardStructs(em: &mut Emitter) {
     while i < em.top.len {
         var n = em.c.nodes[em.top[i]]
         if n.kind == "Struct" {
-            line(em, "typedef struct " + n.name + " " + n.name + ";")
+            line(em, "typedef struct " + cname(n.name) + " " + cname(n.name) + ";")
         }
         i = i + 1
     }
@@ -134,7 +187,7 @@ function emitForwardStructs(em: &mut Emitter) {
     while i < em.top.len {
         var n = em.c.nodes[em.top[i]]
         if n.kind == "Enum" {
-            line(em, "typedef struct " + n.name + " " + n.name + ";")
+            line(em, "typedef struct " + cname(n.name) + " " + cname(n.name) + ";")
         }
         i = i + 1
     }
@@ -150,7 +203,7 @@ function emitEnums(em: &mut Emitter) {
             var hasPayload = false
             var j = 0
             while j < n.names.len {
-                consts.push(n.name + "_" + n.names[j] + " = " + to_text(j))
+                consts.push(cname(n.name) + "_" + cname(n.names[j]) + " = " + to_text(j))
                 if n.args[j] > 0 {
                     hasPayload = true
                 }
@@ -158,10 +211,10 @@ function emitEnums(em: &mut Emitter) {
             }
             line(em, "enum { " + join(consts, ", ") + " };")
             if !hasPayload {
-                line(em, "struct " + n.name + " { int tag; };")
+                line(em, "struct " + cname(n.name) + " { int tag; };")
                 line(em, "")
             } else {
-                line(em, "struct " + n.name + " {")
+                line(em, "struct " + cname(n.name) + " {")
                 em.indent = em.indent + 1
                 line(em, "int tag;")
                 line(em, "union {")
@@ -177,7 +230,7 @@ function emitEnums(em: &mut Emitter) {
                             fields.push(ctype(n.types[base + m]) + " payload_" + to_text(m) + ";")
                             m = m + 1
                         }
-                        line(em, "struct { " + join(fields, " ") + " } " + n.names[k] + ";")
+                        line(em, "struct { " + join(fields, " ") + " } " + cname(n.names[k]) + ";")
                     }
                     base = base + cnt
                     k = k + 1
@@ -198,11 +251,11 @@ function emitStructs(em: &mut Emitter) {
     while i < em.top.len {
         var n = em.c.nodes[em.top[i]]
         if n.kind == "Struct" {
-            line(em, "struct " + n.name + " {")
+            line(em, "struct " + cname(n.name) + " {")
             em.indent = em.indent + 1
             var j = 0
             while j < n.names.len {
-                line(em, ctype(n.types[j]) + " " + n.names[j] + ";")
+                line(em, ctype(n.types[j]) + " " + cname(n.names[j]) + ";")
                 j = j + 1
             }
             em.indent = em.indent - 1
@@ -220,7 +273,7 @@ function paramList(n: Node) -> text {
     var parts = List(text)
     var i = 0
     while i < n.names.len {
-        parts.push(ctype(n.types[i]) + " " + n.names[i])
+        parts.push(ctype(n.types[i]) + " " + cname(n.names[i]))
         i = i + 1
     }
     return join(parts, ", ")
@@ -239,7 +292,11 @@ function emitPrototypes(em: &mut Emitter) {
             if n.flag == 1 {
                 linkage = ""
             }
-            line(em, linkage + ctype(n.t) + " " + n.name + "(" + paramList(n) + ");")
+            var pname = n.name
+            if n.flag == 0 {
+                pname = cname(pname)
+            }
+            line(em, linkage + ctype(n.t) + " " + pname + "(" + paramList(n) + ");")
         }
         i = i + 1
     }
@@ -260,7 +317,7 @@ function emitBodies(em: &mut Emitter) {
 
 function emitFunc(em: &mut Emitter, n: Node) {
     var ret = ctype(n.t)
-    var name = n.name
+    var name = cname(n.name)
     var params = paramList(n)
     var linkage = "static "
     if name == "main" {
@@ -306,7 +363,7 @@ function emitStmt(em: &mut Emitter, idx: int) {
         if t == "" {
             t = em.c.nodes[n.e1].ty
         }
-        line(em, ctype(t) + " " + n.name + " = " + expr(em, n.e1) + ";")
+        line(em, ctype(t) + " " + cname(n.name) + " = " + expr(em, n.e1) + ";")
         return
     }
     if n.kind == "Assign" {
@@ -478,7 +535,7 @@ function emitMatch(em: &mut Emitter, n: Node) {
             em.indent = em.indent + 1
             var j = 0
             while j < arm.names.len {
-                line(em, ctype(fields[j]) + " " + arm.names[j] + " = " + tmp + ".u." + arm.s + ".payload_" + to_text(j) + ";")
+                line(em, ctype(fields[j]) + " " + cname(arm.names[j]) + " = " + tmp + ".u." + cname(arm.s) + ".payload_" + to_text(j) + ";")
                 j = j + 1
             }
             emitStmt(em, arm.e1)
@@ -549,7 +606,7 @@ function expr(em: &mut Emitter, idx: int) -> text {
         if ci >= 0 {
             return expr(em, em.c.consts[ci].lit)
         }
-        return n.name
+        return cname(n.name)
     }
     if n.kind == "Binary" {
         if em.c.nodes[n.e1].ty == "bytes" {
@@ -750,7 +807,7 @@ function emitField(em: &mut Emitter, n: Node) -> text {
     if bt.len >= 1 && bt[0] == '&' {
         op = "->"
     }
-    return "(" + expr(em, n.e1) + ")" + op + n.name
+    return "(" + expr(em, n.e1) + ")" + op + cname(n.name)
 }
 
 function emitIndex(em: &mut Emitter, n: Node) -> text {
@@ -769,15 +826,15 @@ function emitIndex(em: &mut Emitter, n: Node) -> text {
 
 function emitStructLit(em: &mut Emitter, n: Node) -> text {
     if n.args.len == 0 {
-        return "(" + n.name + "){0}"
+        return "(" + cname(n.name) + "){0}"
     }
     var parts = List(text)
     var i = 0
     while i < n.args.len {
-        parts.push("." + n.names[i] + " = " + expr(em, n.args[i]))
+        parts.push("." + cname(n.names[i]) + " = " + expr(em, n.args[i]))
         i = i + 1
     }
-    return "(" + n.name + "){ " + join(parts, ", ") + " }"
+    return "(" + cname(n.name) + "){ " + join(parts, ", ") + " }"
 }
 
 function enumVariant(em: &mut Emitter, ei: int, variant: text, args: List(int)) -> text {
@@ -785,7 +842,7 @@ function enumVariant(em: &mut Emitter, ei: int, variant: text, args: List(int)) 
     var idx = indexOf(e.vnames, variant)
     var fields = enumVariantFields(&em.c, ei, variant)
     if fields.len == 0 {
-        return "(" + e.name + "){ .tag = " + to_text(idx) + " }"
+        return "(" + cname(e.name) + "){ .tag = " + to_text(idx) + " }"
     }
     var inner = List(text)
     var i = 0
@@ -793,7 +850,7 @@ function enumVariant(em: &mut Emitter, ei: int, variant: text, args: List(int)) 
         inner.push(".payload_" + to_text(i) + " = " + expr(em, args[i]))
         i = i + 1
     }
-    return "(" + e.name + "){ .tag = " + to_text(idx) + ", .u." + variant + " = { " + join(inner, ", ") + " } }"
+    return "(" + cname(e.name) + "){ .tag = " + to_text(idx) + ", .u." + cname(variant) + " = { " + join(inner, ", ") + " } }"
 }
 
 function printCall(em: &mut Emitter, stream: text, arg: int) -> text {
@@ -961,7 +1018,7 @@ function emitFor(em: &mut Emitter, n: Node) {
     line(em, "int64_t " + idx + " = 0;")
     line(em, "while (" + idx + " < " + cond + ") {")
     em.indent = em.indent + 1
-    line(em, ctype(et) + " " + n.name + " = " + elem + ";")
+    line(em, ctype(et) + " " + cname(n.name) + " = " + elem + ";")
     var i = 0
     while i < body.args.len {
         emitStmt(em, body.args[i])

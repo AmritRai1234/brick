@@ -490,3 +490,44 @@ func TestBuilderAddIsSingleStrlen(t *testing.T) {
 		t.Errorf("builder growth should be shared through brick_builder_reserve\n%s", out)
 	}
 }
+
+// Names that C owns are legal Brick names; the emitter writes "bx_" in front of
+// them so the generated C cannot clash with the C library or the runtime.
+func TestReservedNamesAreRenamed(t *testing.T) {
+	out := gen(t, `
+	struct long { printf: int }
+	enum size_t { Small(int), Big(int) }
+	function double(n: int) -> int { return n * 2 }
+	function main() {
+		var strlen = 3
+		var p = long{ printf: strlen }
+		print(double(p.printf))
+		var s = size_t.Small(1)
+		match s { size_t.Small(x) => print(x), size_t.Big(y) => print(y) }
+	}`)
+	for _, want := range []string{
+		"typedef struct bx_long bx_long;",
+		"typedef struct bx_size_t bx_size_t;",
+		"struct bx_long {",
+		"    int64_t bx_printf;",
+		"static int64_t bx_double(int64_t n);",
+		"int64_t bx_strlen = 3;",
+		"(bx_long){ .bx_printf = bx_strlen }",
+		"bx_double((p).bx_printf)",
+		"enum { bx_size_t_Small = 0, bx_size_t_Big = 1 };",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q\n%s", want, out)
+		}
+	}
+}
+
+// A program that uses none of those names must generate exactly the C it did
+// before the rename existed: no "bx_" anywhere.
+func TestOrdinaryNamesAreUntouched(t *testing.T) {
+	out := gen(t, `struct P { x: int } function main() { var p = P{ x: 1 } print(p.x) }`)
+	// "bx_" only ever appears through cname; the runtime prelude has none.
+	if strings.Contains(out, "bx_") {
+		t.Errorf("unexpected renaming in ordinary program:\n%s", out)
+	}
+}

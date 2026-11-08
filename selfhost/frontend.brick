@@ -1083,11 +1083,33 @@ function evalConstNode(c: &mut Checker, idx: int) -> text {
     return ""
 }
 
+// isBuiltinTypeName reports whether name is one of the type names the language
+// itself provides. A struct or enum may not take one: the name would be
+// ambiguous everywhere a type is expected.
+function isBuiltinTypeName(name: text) -> bool {
+    return name == "int" || name == "float" || name == "bool" ||
+        name == "text" || name == "bytes" || name == "void"
+}
+
+// isBuiltinFuncName reports whether name is one of the functions the language
+// itself provides, such as print or exit. Declaring a function with one of
+// these names would be silently ignored at every call site.
+function isBuiltinFuncName(name: text) -> bool {
+    return name == "print" || name == "print_bytes" || name == "eprint" ||
+        name == "exit" || name == "system" || name == "getenv" ||
+        name == "read_dir" || name == "is_dir" || name == "read_file" ||
+        name == "write_file" || name == "slice" || name == "args" ||
+        name == "to_text" || name == "to_bytes"
+}
+
 function collect(c: &mut Checker, top: List(int)) {
     var i = 0
     while i < top.len {
         var n = c.nodes[top[i]]
         if n.kind == "Struct" {
+            if isBuiltinTypeName(n.name) {
+                report(c, to_text(n.line) + ":" + to_text(n.col) + ": cannot name a struct \"" + n.name + "\": " + n.name + " is a built-in type")
+            }
             c.structs.push(StructInfo{ name: n.name, fnames: n.names, ftys: n.types })
         }
         i = i + 1
@@ -1096,6 +1118,9 @@ function collect(c: &mut Checker, top: List(int)) {
     while i < top.len {
         var n = c.nodes[top[i]]
         if n.kind == "Enum" {
+            if isBuiltinTypeName(n.name) {
+                report(c, to_text(n.line) + ":" + to_text(n.col) + ": cannot name an enum \"" + n.name + "\": " + n.name + " is a built-in type")
+            }
             c.enums.push(EnumInfo{ name: n.name, vnames: n.names, vftys: n.types, counts: n.args })
         }
         i = i + 1
@@ -1116,6 +1141,9 @@ function collect(c: &mut Checker, top: List(int)) {
     while i < top.len {
         var n = c.nodes[top[i]]
         if n.kind == "Func" {
+            if isBuiltinFuncName(n.name) {
+                report(c, to_text(n.line) + ":" + to_text(n.col) + ": cannot name a function \"" + n.name + "\": " + n.name + " is a built-in function")
+            }
             c.funcs.push(FuncInfo{ name: n.name, pnames: n.names, ptys: n.types, ret: n.t })
         }
         i = i + 1
