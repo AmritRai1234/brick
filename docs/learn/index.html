@@ -1645,6 +1645,13 @@ function main() {
         start with a missing brace or a single <code class="inline">=</code> where you meant
         <code class="inline">==</code>.</p>
 
+      <p>One last thing worth seeing: <code class="inline">examples/reserved.brick</code>.
+        It names things <code class="inline">long</code>, <code class="inline">printf</code>,
+        <code class="inline">strlen</code> and <code class="inline">size_t</code> — all words C
+        uses itself — and still runs. The trick is invisible in your source: run
+        <code class="inline">./bin/brick emit examples/reserved.brick</code> and you will see
+        the extra <code class="inline">bx_</code> in front of those names in the C it writes.</p>
+
       <div class="done-row">
         <button type="button" data-done="12" aria-pressed="false">Mark lesson 12 done</button>
       </div>
@@ -1672,6 +1679,7 @@ function main() {
           <tr><td>repeat</td><td><code>while n &gt; 0 { ... }</code> · <code>for x in xs { ... }</code></td></tr>
           <tr><td>keep a list</td><td><code>var xs = List(int)</code> + <code>xs.push(4)</code> · <code>xs.len</code> · <code>xs[0]</code></td></tr>
           <tr><td>make a function</td><td><code>function twice(n: int) -&gt; int</code> then <code>{ return n * 2 }</code></td></tr>
+          <tr><td>pick a name C also uses</td><td><code>function double(...)</code> · <code>struct long { ... }</code> — no problem; the C Brick writes says <code>bx_double</code>, <code>bx_long</code></td></tr>
           <tr><td>number → text</td><td><code>to_text(n)</code></td></tr>
           <tr><td>many pieces of text</td><td><code>var b = Builder()</code> + <code>b.add(...)</code> + <code>b.build()</code></td></tr>
           <tr><td>a line break</td><td><code>"\n"</code></td></tr>
@@ -1754,6 +1762,9 @@ function main() {
         actual output.</p>
       <p>Next: the <code class="inline">examples/</code> folder, <code class="inline">docs/SPEC.md</code>,
         and <code class="inline">make build</code>.</p>
+      <p style="font-size:.8rem; opacity:.8">Written for Brick 0.3.29. The naming rule in lesson 7
+        (<code class="inline">double</code>, <code class="inline">printf</code> and friends)
+        arrived in this version.</p>
     </footer>
   </main>
 </div>
