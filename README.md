@@ -25,6 +25,15 @@ compiler with `BRICK_CC=clang`.
 **New to programming?** Start with [`docs/learn/index.html`](docs/learn/index.html)
 — a from-zero, twelve-lesson guide in plain English. Open it in any browser.
 
+**Want to know what the machine is doing?**
+[`docs/systems/index.html`](docs/systems/index.html) is the other guide: twenty
+chapters on what happens between pressing Enter and `exit_group` — the loader, ELF,
+the address space, bytes and two's complement, the stack, the heap, system calls,
+file descriptors, buffering, inodes, `fork`/`exec`/`wait`, signals, time, and how
+Brick's own compiler turns your file into C. Every trace, address and timing in it
+was measured on a real machine, and Appendix A is the source of the tracer used to
+produce the syscall listings.
+
 ## Commands
 
 | Command | What it does |

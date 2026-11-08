@@ -1,0 +1,2738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Learn Brick — from zero, no coding experience needed</title>
+<meta name="description" content="A gentle, hands-on introduction to the Brick programming language for absolute beginners. No prior coding experience required.">
+<style>
+  :root {
+    --bg: #14110f;
+    --panel: #1c1815;
+    --panel-2: #221d19;
+    --line: #332b26;
+    --ink: #efe7e1;
+    --muted: #a79a91;
+    --accent: #e2683c;
+    --accent-soft: #f0a17e;
+    --gold: #f2c14e;
+    --green: #7bc47f;
+    --red: #e56b6f;
+    --code-bg: #100e0c;
+    --code-ink: #e8e0d9;
+    --radius: 14px;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --maxw: 1180px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; scroll-padding-top: 76px; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a { color: var(--accent-soft); }
+  a:hover { color: var(--gold); }
+
+  .skip {
+    position: absolute; left: -9999px; top: 0;
+    background: var(--accent); color: #1a1210; padding: .6rem 1rem;
+    z-index: 100; border-radius: 0 0 8px 0; font-weight: 700;
+  }
+  .skip:focus { left: 0; }
+
+  /* ---------- top bar ---------- */
+  .topbar {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(20,17,15,.88);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar-inner {
+    max-width: var(--maxw); margin: 0 auto; padding: .7rem 1.2rem;
+    display: flex; align-items: center; gap: 1rem;
+  }
+  .brand { display: flex; align-items: center; gap: .55rem; font-weight: 800; letter-spacing: .2px; }
+  .brand .mark {
+    width: 26px; height: 26px; border-radius: 6px; font-weight: 800;
+    background: linear-gradient(135deg, var(--accent), #b5431f);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.12);
+    display: grid; place-items: center; font-size: 13px; color: #201512;
+  }
+  .brand small { font-weight: 500; color: var(--muted); }
+  .progress-wrap { flex: 1; display: flex; align-items: center; gap: .7rem; min-width: 0; }
+  .progress-track {
+    flex: 1; height: 7px; background: #2a231f; border-radius: 99px; overflow: hidden; min-width: 60px;
+  }
+  .progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--gold)); transition: width .35s ease; }
+  .progress-label { font-size: .78rem; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .menu-btn {
+    display: none; background: #261f1b; color: var(--ink); border: 1px solid var(--line);
+    border-radius: 8px; padding: .4rem .7rem; font: inherit; font-size: .85rem; cursor: pointer;
+  }
+
+  /* ---------- layout ---------- */
+  .shell {
+    max-width: var(--maxw); margin: 0 auto; padding: 0 1.2rem 6rem;
+    display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 2.4rem;
+  }
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: 1fr; gap: 0; }
+    .menu-btn { display: inline-block; }
+  }
+
+  nav.toc {
+    position: sticky; top: 62px; align-self: start;
+    max-height: calc(100vh - 80px); overflow-y: auto;
+    padding: 1.4rem 0 2rem; font-size: .9rem;
+  }
+  nav.toc h2 {
+    font-size: .72rem; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--muted); margin: 0 0 .7rem; font-weight: 700;
+  }
+  nav.toc ol { list-style: none; margin: 0; padding: 0; counter-reset: step; }
+  nav.toc li { counter-increment: step; }
+  nav.toc a {
+    display: flex; gap: .55rem; align-items: baseline;
+    color: var(--muted); text-decoration: none; padding: .32rem .55rem;
+    border-radius: 8px; border-left: 2px solid transparent;
+  }
+  nav.toc a::before {
+    content: counter(step); font-family: var(--mono); font-size: .72rem;
+    color: #6b5f57; min-width: 1.3em; text-align: right;
+  }
+  nav.toc a:hover { background: #1e1a17; color: var(--ink); }
+  nav.toc a.active { color: var(--ink); background: #221c18; border-left-color: var(--accent); }
+  nav.toc a.done::before { content: "✓"; color: var(--green); }
+  nav.toc ol.plain { counter-reset: none; }
+  nav.toc ol.plain li { counter-increment: none; }
+  nav.toc ol.plain a::before { content: "·"; }
+  @media (max-width: 900px) {
+    nav.toc {
+      position: static; max-height: none; display: none;
+      border-bottom: 1px solid var(--line); padding-top: .5rem;
+    }
+    nav.toc.open { display: block; }
+  }
+
+  main { padding-top: 1.6rem; min-width: 0; }
+
+  /* ---------- hero ---------- */
+  .hero { padding: 2.6rem 0 1.4rem; }
+  .eyebrow {
+    display: inline-block; font-size: .75rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--gold); border: 1px solid #4a3a22; background: #241d14;
+    padding: .25rem .6rem; border-radius: 99px; font-weight: 700; margin-bottom: 1rem;
+  }
+  .hero h1 {
+    font-size: clamp(2.1rem, 5vw, 3.3rem); line-height: 1.08; margin: 0 0 1rem;
+    letter-spacing: -.02em;
+  }
+  .hero h1 .accent { color: var(--accent); }
+  .hero p.lede { font-size: 1.15rem; color: #d7cbc4; max-width: 44ch; margin: 0 0 1.4rem; }
+  .hero-actions { display: flex; flex-wrap: wrap; gap: .7rem; }
+  .btn {
+    display: inline-flex; align-items: center; gap: .45rem;
+    font: inherit; font-weight: 650; font-size: .95rem;
+    padding: .65rem 1.1rem; border-radius: 10px; cursor: pointer;
+    text-decoration: none; border: 1px solid transparent;
+  }
+  .btn-primary { background: var(--accent); color: #1a1009; }
+  .btn-primary:hover { background: #ef7a4c; color: #1a1009; }
+  .btn-ghost { background: #211b18; color: var(--ink); border-color: var(--line); }
+  .btn-ghost:hover { background: #2a221d; color: var(--ink); }
+
+  .brickstrip {
+    height: 10px; margin: 2rem 0 0; border-radius: 99px; overflow: hidden;
+    background:
+      repeating-linear-gradient(90deg,
+        var(--accent) 0 46px, transparent 46px 50px),
+      repeating-linear-gradient(90deg,
+        #8e3a1e 0 26px, transparent 26px 30px);
+    opacity: .55;
+  }
+
+  /* ---------- lessons ---------- */
+  section.lesson {
+    padding: 2.4rem 0 1.2rem;
+    border-top: 1px solid var(--line);
+    margin-top: 2rem;
+  }
+  section.lesson:first-of-type { border-top: none; margin-top: .5rem; }
+  .lesson-head { display: flex; align-items: flex-start; gap: .9rem; margin-bottom: .4rem; }
+  .lesson-num {
+    flex: none; width: 34px; height: 34px; border-radius: 9px;
+    display: grid; place-items: center; font-family: var(--mono); font-size: .85rem;
+    background: #2a211c; color: var(--gold); border: 1px solid #3d3028; margin-top: .25rem;
+  }
+  .lesson h2 { font-size: 1.6rem; margin: 0; letter-spacing: -.01em; line-height: 1.25; }
+  .lesson .goal { color: var(--muted); margin: .2rem 0 0; font-size: .95rem; }
+  .lesson p { max-width: 68ch; }
+  h3 { font-size: 1.08rem; margin: 1.8rem 0 .5rem; }
+  ul, ol { max-width: 68ch; }
+  li { margin: .3rem 0; }
+  code.inline {
+    font-family: var(--mono); font-size: .88em; background: #241e1a;
+    padding: .1em .4em; border-radius: 5px; border: 1px solid #332a24; color: #f4ddd0;
+  }
+
+  /* ---------- code blocks ---------- */
+  .code {
+    margin: 1rem 0; border: 1px solid var(--line); border-radius: var(--radius);
+    overflow: hidden; background: var(--code-bg);
+  }
+  .code-bar {
+    display: flex; align-items: center; gap: .6rem;
+    padding: .45rem .7rem; background: #191513; border-bottom: 1px solid #2a2320;
+    font-size: .78rem; color: var(--muted); font-family: var(--mono);
+  }
+  .dots { display: flex; gap: 5px; }
+  .dots i { width: 9px; height: 9px; border-radius: 50%; background: #3a302b; display: block; }
+  .dots i:nth-child(1) { background: #5a3a33; }
+  .dots i:nth-child(2) { background: #5a4f33; }
+  .dots i:nth-child(3) { background: #38513a; }
+  .code-bar .name { flex: 1; }
+  .code-bar button {
+    font: inherit; font-size: .75rem; font-family: var(--mono);
+    background: #251f1b; color: var(--muted); border: 1px solid #362c26;
+    border-radius: 7px; padding: .2rem .55rem; cursor: pointer;
+  }
+  .code-bar button:hover { color: var(--ink); background: #2e2621; }
+  pre {
+    margin: 0; padding: 1rem 1.1rem; overflow-x: auto;
+    font-family: var(--mono); font-size: .9rem; line-height: 1.6;
+    color: var(--code-ink); tab-size: 4;
+  }
+  pre code { font-family: inherit; }
+  .tok-kw { color: #e88b6a; font-weight: 600; }
+  .tok-type { color: #86c6e8; }
+  .tok-str { color: #b3d98a; }
+  .tok-num { color: #f2c14e; }
+  .tok-com { color: #7d706a; font-style: italic; }
+  .tok-fn { color: #e9cfa8; }
+  .tok-builtin { color: #c9a0f0; }
+
+  .output {
+    border-top: 1px dashed #332a24; background: #0c0a09;
+    padding: .85rem 1.1rem; font-family: var(--mono); font-size: .86rem;
+    color: #b9d8b3; white-space: pre-wrap; display: none;
+  }
+  .output.show { display: block; }
+  .output .label {
+    display: block; font-size: .68rem; letter-spacing: .12em; text-transform: uppercase;
+    color: #6f645d; margin-bottom: .4rem; font-family: var(--sans);
+  }
+
+  /* ---------- callouts ---------- */
+  .note {
+    border-left: 3px solid var(--gold); background: #201a12;
+    padding: .85rem 1rem; border-radius: 0 10px 10px 0; margin: 1.2rem 0;
+    font-size: .95rem; color: #e5d9c9;
+  }
+  .note strong { color: var(--gold); }
+  .warn { border-left-color: var(--red); background: #221415; color: #f0d5d5; }
+  .warn strong { color: var(--red); }
+  .tip { border-left-color: var(--green); background: #14201a; color: #d4ecdb; }
+  .tip strong { color: var(--green); }
+
+  /* ---------- run / try ---------- */
+  .try {
+    border: 1px solid #3a2f28; background: var(--panel);
+    border-radius: var(--radius); padding: 1rem 1.1rem; margin: 1.3rem 0;
+  }
+  .try h4 {
+    margin: 0 0 .5rem; font-size: .78rem; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--accent-soft);
+  }
+  .try p:last-child { margin-bottom: 0; }
+  .reveal {
+    margin-top: .7rem; background: none; border: 1px solid #4a3b31;
+    color: var(--muted); font: inherit; font-size: .86rem; padding: .35rem .75rem;
+    border-radius: 8px; cursor: pointer;
+  }
+  .reveal:hover { color: var(--ink); border-color: #6a5245; }
+  .hidden-answer { display: none; margin-top: .8rem; }
+  .hidden-answer.show { display: block; }
+
+  /* ---------- quiz ---------- */
+  .quiz {
+    border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 1rem 1.1rem; background: var(--panel-2); margin: 1.3rem 0;
+  }
+  .quiz .q { font-weight: 650; margin: 0 0 .7rem; }
+  .quiz .opts { display: grid; gap: .45rem; }
+  .quiz button.opt {
+    text-align: left; font: inherit; font-size: .93rem; color: var(--ink);
+    background: #1a1614; border: 1px solid #362c26; border-radius: 9px;
+    padding: .5rem .8rem; cursor: pointer;
+  }
+  .quiz button.opt:hover:not(:disabled) { border-color: #5d4a3e; background: #221c18; }
+  .quiz button.opt.correct { border-color: var(--green); background: #16261c; color: #d8f0dd; }
+  .quiz button.opt.wrong { border-color: var(--red); background: #26161a; color: #f3d3d6; }
+  .quiz button.opt:disabled { cursor: default; }
+  .quiz .fb { margin: .7rem 0 0; font-size: .9rem; color: var(--muted); min-height: 1.2em; }
+  .quiz .fb.ok { color: var(--green); }
+  .quiz .fb.no { color: var(--red); }
+
+  /* ---------- predict ---------- */
+  .predict { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; margin-top: .7rem; }
+  .predict input {
+    font-family: var(--mono); font-size: .9rem; background: #151211; color: var(--ink);
+    border: 1px solid #3a2f28; border-radius: 8px; padding: .4rem .6rem; min-width: 12ch; flex: 1;
+  }
+  .predict input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .predict button {
+    font: inherit; font-size: .86rem; background: #2a211c; color: var(--ink);
+    border: 1px solid #3f332b; border-radius: 8px; padding: .4rem .8rem; cursor: pointer;
+  }
+  .predict .verdict { font-size: .86rem; }
+
+  /* ---------- misc ---------- */
+  .done-row {
+    display: flex; align-items: center; gap: .6rem; margin-top: 1.8rem;
+    padding-top: 1rem; border-top: 1px dashed #2c2521;
+  }
+  .done-row button {
+    font: inherit; font-size: .85rem; background: #211b17; color: var(--muted);
+    border: 1px solid #3a2f28; border-radius: 8px; padding: .35rem .8rem; cursor: pointer;
+  }
+  .done-row button:hover { color: var(--ink); }
+  .done-row button[aria-pressed="true"] { color: var(--green); border-color: #3a5c42; background: #152019; }
+
+  .pipeline { display: flex; flex-wrap: wrap; align-items: stretch; gap: .5rem; margin: 1.2rem 0; }
+  .pipe-step {
+    flex: 1 1 130px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: .7rem .8rem; font-size: .85rem;
+  }
+  .pipe-step b { display: block; font-family: var(--mono); color: var(--gold); font-size: .82rem; }
+  .pipe-arrow { display: grid; place-items: center; color: #6b5f57; font-size: 1.1rem; }
+
+  table.cheat { width: 100%; border-collapse: collapse; font-size: .9rem; margin: 1rem 0; }
+  table.cheat th, table.cheat td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid #2b2420; vertical-align: top; }
+  table.cheat th { color: var(--muted); font-weight: 600; font-size: .78rem; letter-spacing: .08em; text-transform: uppercase; }
+  table.cheat td code { font-family: var(--mono); color: #f0d9c9; font-size: .87em; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .8rem; margin: 1.2rem 0; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: .9rem 1rem; font-size: .92rem;
+  }
+  .card h4 { margin: 0 0 .35rem; font-size: .95rem; }
+  .card p { margin: 0; color: var(--muted); font-size: .88rem; }
+
+  footer {
+    border-top: 1px solid var(--line); margin-top: 3rem; padding: 2rem 0 4rem;
+    color: var(--muted); font-size: .88rem;
+  }
+  .kbd {
+    font-family: var(--mono); font-size: .78rem; background: #241e1a;
+    border: 1px solid #3a2f28; border-bottom-width: 2px; border-radius: 6px;
+    padding: .05rem .4rem; color: var(--ink);
+  }
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+  @media print {
+    .topbar, nav.toc, .code-bar button, .reveal, .quiz, .done-row, .hero-actions { display: none !important; }
+    body { background: #fff; color: #000; }
+    .output { display: block !important; }
+    .shell { grid-template-columns: 1fr; }
+  }
+
+  /* ---------- systems guide additions ---------- */
+  .part { padding: 2.4rem 0 .4rem; border-top: 1px solid var(--line); margin-top: 2.2rem; }
+  .part:first-of-type { border-top: none; margin-top: 0; }
+  .part h2 { font-size: 1.7rem; margin: .25rem 0 .35rem; letter-spacing: -.01em; }
+  .part .goal { color: var(--muted); max-width: 60ch; }
+
+  pre.chain {
+    font-family: var(--mono); font-size: .82rem; line-height: 1.55;
+    color: #d7cbc4; background: #14100e;
+    border: 1px solid var(--line); border-left: 3px solid var(--gold);
+    border-radius: 10px; padding: .95rem 1.1rem; margin: 1rem 0 1.4rem;
+    overflow-x: auto; white-space: pre;
+  }
+
+  .code.trace pre { color: #cfc4bc; }
+  .code.trace { border-left: 3px solid var(--accent); }
+
+  details { margin: 1.1rem 0; }
+  details summary {
+    cursor: pointer; font-weight: 600; color: var(--accent-soft);
+    padding: .55rem .8rem; border: 1px solid var(--line); border-radius: 9px;
+    background: #1b1714; list-style: none;
+  }
+  details summary::-webkit-details-marker { display: none; }
+  details summary::before { content: "▸ "; color: var(--gold); }
+  details[open] summary::before { content: "▾ "; }
+  details summary:hover { color: var(--gold); }
+
+  nav.toc h2.parthead {
+    font-size: .68rem; letter-spacing: .14em; color: #7d6f66;
+    margin: 1.4rem 0 .35rem;
+  }
+  nav.toc ol.plain a::before { content: none; }
+  nav.toc ol.plain a { padding-left: .55rem; }
+
+  @media print {
+    details summary { display: none; }
+    pre.chain { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#part-1">Skip to the first chapter</a>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <span class="mark">B</span>
+      <span>Brick <small>· how a program runs</small></span>
+    </div>
+    <div class="progress-wrap">
+      <div class="progress-track" role="progressbar" aria-label="Reading progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progressBar">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+      <span class="progress-label" id="progressLabel">0 / 20</span>
+    </div>
+    <button class="menu-btn" id="menuBtn" aria-expanded="false" aria-controls="toc">Contents</button>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" id="toc" aria-label="Contents">
+    <h2 class="parthead">Part one · From a command to a running program</h2>
+    <ol class="plain">
+      <li><a href="#ch1">1 · A command is a file the kernel loads</a></li>
+      <li><a href="#ch2">2 · The file on disk: ELF</a></li>
+      <li><a href="#ch3">3 · Loading: the address space</a></li>
+    </ol>
+    <h2 class="parthead">Part two · What the CPU actually sees</h2>
+    <ol class="plain">
+      <li><a href="#ch4">4 · Everything is bytes</a></li>
+      <li><a href="#ch5">5 · Text is bytes with a zero</a></li>
+      <li><a href="#ch6">6 · Functions and the stack</a></li>
+      <li><a href="#ch7">7 · The heap, and how a List grows</a></li>
+      <li><a href="#ch8">8 · Arenas</a></li>
+    </ol>
+    <h2 class="parthead">Part three · Talking to the operating system</h2>
+    <ol class="plain">
+      <li><a href="#ch9">9 · System calls</a></li>
+      <li><a href="#ch10">10 · File descriptors</a></li>
+      <li><a href="#ch11">11 · Buffering</a></li>
+      <li><a href="#ch12">12 · Files, inodes, offsets</a></li>
+      <li><a href="#ch13">13 · fork, exec, wait</a></li>
+      <li><a href="#ch14">14 · Signals</a></li>
+      <li><a href="#ch15">15 · Time and the scheduler</a></li>
+    </ol>
+    <h2 class="parthead">Part four · Where your program comes from</h2>
+    <ol class="plain">
+      <li><a href="#ch16">16 · Five stages: bytes to tokens to tree to C</a></li>
+      <li><a href="#ch17">17 · From source to binary, in milliseconds</a></li>
+      <li><a href="#ch18">18 · -O0, -O2, and what the optimiser may delete</a></li>
+      <li><a href="#ch19">19 · Two compilers that must agree</a></li>
+    </ol>
+    <h2 class="parthead">Appendix</h2>
+    <ol class="plain">
+      <li><a href="#appendix-tracer">A · minitrace</a></li>
+    </ol>
+    <h2 class="parthead">Elsewhere</h2>
+    <ol class="plain">
+      <li><a href="../learn/index.html">Learn Brick from zero</a></li>
+      <li><a href="#appendix-tracer">The tracer source</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <div class="hero">
+      <span class="eyebrow">Systems programming, measured on a real machine</span>
+      <h1>What happens when you<br>run a program<span class="accent">.</span></h1>
+      <p class="lede">A command is a file, a file is sections, a process is an address
+        space. This guide follows one program from the Enter key to <code class="inline">exit_group</code>,
+        in the detail you would want from a C book — except every number here was measured,
+        and every program is written in Brick.</p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="#part-1">Start with chapter 1</a>
+        <a class="btn btn-ghost" href="../learn/index.html">I have never coded before</a>
+      </div>
+    </div>
+
+    <!-- ============ PART I ============ -->
+    <section class="part" id="part-1">
+      <span class="eyebrow">Part one</span>
+      <h2>From a command to a running program</h2>
+      <p class="goal">What the machine does in the first millisecond after you press Enter.</p>
+    </section>
+
+    <!-- ============ 1 ============ -->
+    <section class="lesson" id="ch1" data-lesson="1">
+      <div class="lesson-head">
+        <div class="lesson-num">1</div>
+        <div>
+          <h2>A command is a file the kernel loads</h2>
+          <p class="goal">Nothing mysterious happens. Four programs take turns.</p>
+        </div>
+      </div>
+
+      <p>You type this and press Enter:</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">terminal</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>./hello</code></pre>
+      </div>
+
+      <p>Four different pieces of software are about to run, and only one of them is
+        yours:</p>
+
+      <pre class="chain">  you ──▶ terminal ──▶ shell ──▶ kernel ──▶ your program
+          (reads keys)  (bash)   (fork, exec, load)   (main)</pre>
+
+      <p>Here is the actual sequence, captured with a small tracer that stops at every
+        system call (<code class="inline">minitrace</code>, source in the
+        <a href="#appendix-tracer">appendix</a>). It is the output for
+        <code class="inline">examples/hello.brick</code>, trimmed of the loader's
+        housekeeping:</p>
+
+      <div class="code trace">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">minitrace ./hello</span></div>
+        <pre><code>execve   (0x7ffd796dc319, 0x7ffd796dae00, 0x7ffd796dae10)
+             "./hello"
+openat   (0xffffff9c, 0x7f78cd012224, 0x80000)
+             "/etc/ld.so.cache"
+openat   (0xffffff9c, 0x7f78ccff00c0, 0x80000)
+             "/lib64/libc.so.6"
+mmap     (0, 0x1fdb50, 0x1)
+read     (0x9, 0x7ffcc47a3458, 0x400)
+arch_prctl(0x1002, 0x7f78ccdef740, 0x7f78ccdf01e0)
+write    (0x1, 0x65d9010, 0xe)
+Hello, Brick!
+exit_group(0, 0xffffffffffffffb0, 0x7f78ccdefa48)
+exit(0)</code></pre>
+      </div>
+
+      <p>Read it line by line. Every line is the kernel being asked to do one small
+        thing on the caller's behalf:</p>
+
+      <table class="cheat">
+        <thead><tr><th>Call</th><th>What it means</th></tr></thead>
+        <tbody>
+          <tr><td><code>execve("./hello", …)</code></td>
+            <td>“Replace this process's memory with the program in this file.” The path,
+              the argument list and the environment are the only things carried across.
+              This is the moment your program starts existing.</td></tr>
+          <tr><td><code>openat("/etc/ld.so.cache")</code></td>
+            <td>The dynamic loader reads a cache of library locations. It is a normal
+              file, opened by a normal system call.</td></tr>
+          <tr><td><code>openat("/lib64/libc.so.6")</code></td>
+            <td>C's standard library, which Brick's generated C calls (<code>printf</code>,
+              <code>malloc</code>, <code>strlen</code>). It is mapped, not read whole.</td></tr>
+          <tr><td><code>mmap(…)</code></td>
+            <td>“Give this process a range of addresses backed by this file or by memory.”
+              Code, read-only strings, the heap and the stack all arrive this way.</td></tr>
+          <tr><td><code>write(1, buffer, 14)</code></td>
+            <td>Put 14 bytes on file descriptor 1 — standard output. Not “print”: write.</td></tr>
+          <tr><td><code>exit_group(0)</code></td>
+            <td>End every thread of this process with status 0. The shell will see 0.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="note">
+        <strong>Where the shell fits.</strong> The shell is not special. It reads a line,
+        <code class="inline">fork</code>s a copy of itself, and the copy calls
+        <code class="inline">execve</code>. That is why a program can be started from
+        anywhere, by anything: the interface is one system call, not a ritual.
+      </div>
+
+      <p>Two consequences you can observe right now:</p>
+      <ul>
+        <li>A command is a file with execute permission. <code class="inline">ls -l hello</code>
+          shows <code class="inline">-rwxr-xr-x</code>; remove the <code class="inline">x</code>
+          and <code class="inline">execve</code> fails with “Permission denied” before a
+          single instruction of your code runs.</li>
+        <li>Your program does not start at <code class="inline">main</code>. It starts at
+          the ELF entry point printed by <code class="inline">readelf</code>
+          (<code class="inline">0x401060</code> in the next chapter), which belongs to the C
+          runtime. That code sets up the stack and calls <code class="inline">main</code>.</li>
+      </ul>
+
+      <div class="done-row"><button type="button" data-done="1" aria-pressed="false">Mark done</button></div>
+    </section>
+
+    <!-- ============ 2 ============ -->
+    <section class="lesson" id="ch2" data-lesson="2">
+      <div class="lesson-head">
+        <div class="lesson-num">2</div>
+        <div>
+          <h2>The file on disk: ELF</h2>
+          <p class="goal">A program is a map of where each byte goes in memory.</p>
+        </div>
+      </div>
+
+      <p><code class="inline">file</code> answers what kind of thing <code class="inline">./hello</code> is:</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">terminal</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>$ file hello
+hello: ELF 64-bit LSB executable, x86-64, version 1 (SYSV),
+dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2,
+BuildID[sha1]=23b6c9cc…, for GNU/Linux 3.2.0, not stripped</code></pre>
+      </div>
+
+      <p>ELF is a container format. Its header says where to start and where the
+        pieces are; the section table lists the pieces themselves:</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">readelf -h hello</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>Class:                ELF64
+Data:                 2's complement, little endian
+Type:                 EXEC (Executable file)
+Machine:              Advanced Micro Devices X86-64
+Entry point address:  0x401060
+Number of program headers: 13
+Number of section headers: 32</code></pre>
+      </div>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">readelf -SW hello</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>[Nr] Name      Type     Address          Off    Size   Flg
+[ 2] .interp   PROGBITS 000000000040033c 00033c 00001c  A
+[10] .rodata   PROGBITS 00000000004004a0 0004a0 00001e  A
+[17] .text     PROGBITS 0000000000401040 001040 000116  AX
+[24] .data     PROGBITS 0000000000403008 002008 000004  WA
+[25] .bss      NOBITS   000000000040300c 00200c 000004  WA</code></pre>
+      </div>
+
+      <p>Those five sections are worth knowing by name:</p>
+      <ul>
+        <li><code class="inline">.text</code> — machine instructions. Flags <code class="inline">AX</code>:
+          allocated, executable. Never writable.</li>
+        <li><code class="inline">.rodata</code> — read-only data. Your string literals live
+          here. <code class="inline">"Hello, Brick!"</code> is at
+          <code class="inline">0x4004b0</code> and is exactly one byte per character plus a
+          zero.</li>
+        <li><code class="inline">.data</code> — initialized global variables. Four bytes in
+          this program.</li>
+        <li><code class="inline">.bss</code> — globals that start at zero. It takes no space
+          in the file: the kernel hands over zeroed pages. “NOBITS” means exactly that.</li>
+        <li><code class="inline">.interp</code> — the path of the loader
+          (<code class="inline">/lib64/ld-linux-x86-64.so.2</code>) that must run first.</li>
+      </ul>
+
+      <p><code class="inline">size</code> adds them up in the traditional three columns:</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">terminal</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>$ size hello
+   text    data     bss     dec     hex filename
+   1072     532       4    1608     648 hello</code></pre>
+      </div>
+
+      <p>1,072 bytes of code, 532 of initialized data, 4 of zeroed data. Your entire
+        first program is smaller than this paragraph's HTML.</p>
+
+      <h3>What the CPU actually executes</h3>
+
+      <p>Disassemble <code class="inline">main</code> and you see the truth of the
+        whole pipeline: the compiler turned <code class="inline">print("Hello, Brick!")</code>
+        into a call to <code class="inline">puts</code> (gcc spotted that a
+        <code class="inline">printf("%s\n", …)</code> is the same thing), and
+        <code class="inline">puts</code> lives in libc, not in your file:</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">objdump -d hello</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>0000000000401040 &lt;main&gt;:
+  401040:  sub    $0x8,%rsp
+  401044:  mov    $0x4004b0,%edi        # the string in .rodata
+  401049:  call   401030 &lt;puts@plt&gt;      # into libc
+  40104e:  xor    %eax,%eax             # return 0
+  401050:  add    $0x8,%rsp
+  401054:  ret</code></pre>
+      </div>
+
+      <p>Six instructions. No I/O instruction exists on x86-64; <code class="inline">puts</code>
+        will eventually ask the kernel with <code class="inline">write</code>, exactly as
+        chapter 1 showed.</p>
+
+      <div class="note tip">
+        <strong>Why this matters when debugging.</strong> Half of “my program does
+        something impossible” is really “the call went to a different function than I
+        thought” — the linker's job. <code class="inline">nm hello</code> lists every symbol
+        and tells you whether it is defined here (<code class="inline">T</code>),
+        undefined (<code class="inline">U</code>), or in read-only data
+        (<code class="inline">R</code>).
+      </div>
+
+      <div class="done-row"><button type="button" data-done="2" aria-pressed="false">Mark done</button></div>
+    </section>
+
+    <!-- ============ 3 ============ -->
+    <section class="lesson" id="ch3" data-lesson="3">
+      <div class="lesson-head">
+        <div class="lesson-num">3</div>
+        <div>
+          <h2>Loading: the address space</h2>
+          <p class="goal">Every process gets its own private map of memory. Learn to read it.</p>
+        </div>
+      </div>
+
+      <p>The kernel does not copy the file into one big block. It builds a
+        <em>virtual</em> address space: a private map from the addresses your program
+        uses to real pages of memory. Two processes can both use address
+        <code class="inline">0x401040</code> and never meet.</p>
+
+      <p>Run this C program (it is deliberately <code class="inline">-O0</code>, so nothing
+        is optimized away):</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">layout.c</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>#include &lt;stdio.h&gt;
+#include &lt;stdlib.h&gt;
+
+int global_initialized = 42;
+int global_zero;
+
+int add(int a, int b) { return a + b; }
+
+int main(void)
+{
+    int  local = add(2, 3);
+    int *heap  = malloc(16);
+
+    printf("function add   %p\n", (void *)add);
+    printf("global (data)  %p\n", (void *)&amp;global_initialized);
+    printf("global (bss)   %p\n", (void *)&amp;global_zero);
+    printf("heap (malloc)  %p\n", (void *)heap);
+    printf("stack (local)  %p\n", (void *)&amp;local);
+    printf("value at heap  %d\n", *heap);
+
+    free(heap);
+    return 0;
+}</code></pre>
+      </div>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">terminal</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>$ cc -O0 -o layout layout.c &amp;&amp; ./layout
+function add   0x401156
+global (data)  0x40301c
+global (bss)   0x403024
+heap (malloc)  0x1ed5d010
+stack (local)  0x7ffcb38040c4
+value at heap  0</code></pre>
+      </div>
+
+      <p>The numbers are not random. They are the map:</p>
+
+      <pre class="chain">high addresses   0x7fff…  ┌──────────────┐
+                          │    stack     │  local variables, grows down
+                          ├──────────────┤
+                          │      ↓       │
+                          │              │
+                          │      ↑       │
+                          ├──────────────┤
+                          │     heap     │  malloc, grows up
+                          ├──────────────┤
+                          │  .bss (zero) │  0x403024
+                          ├──────────────┤
+                          │    .data     │  0x40301c
+                          ├──────────────┤
+                          │   .rodata    │  string literals
+                          ├──────────────┤
+                          │    .text     │  0x401156  (code)
+low addresses    0x400000 └──────────────┘</pre>
+
+      <p>Three things to notice:</p>
+      <ol>
+        <li><strong>Code and globals sit low</strong>, around
+          <code class="inline">0x400000</code> — a default chosen by the linker.</li>
+        <li><strong>The heap is somewhere in the middle</strong>
+          (<code class="inline">0x1ed5d010</code> here) and the stack is far away at
+          <code class="inline">0x7ffc…</code>. They grow toward each other, with a vast
+          empty gap between them. That gap is why “out of memory” is a real event and not
+          an immediate collision.</li>
+        <li><strong>The heap value is 0, not garbage.</strong> Fresh pages from the kernel
+          are zeroed. Do not rely on it in C — but it explains a lot of “why is my
+          uninitialized data zero today?”</li>
+      </ol>
+
+      <h3>Why the stack address changes every run</h3>
+
+      <p>Run <code class="inline">./layout</code> twice. The stack and heap addresses differ;
+        the code and global addresses do not. This is ASLR (address space layout
+        randomization): the kernel slides the stack, the heap and the libraries by a random
+        amount each time, so a bug that lets an attacker guess an address is harder to
+        exploit. It is also why a tutorial's “the address was 0x7ffd…” never matches yours.</p>
+
+      <div class="note">
+        <strong>And in Brick?</strong> A Brick variable is a C variable; a
+        <code class="inline">List</code> is a small struct holding a pointer to the heap. You
+        can see all of it with <code class="inline">./bin/brick emit</code>. Brick does not
+        hide the machine; it hides only the parts you did not ask for.
+      </div>
+
+      <div class="done-row"><button type="button" data-done="3" aria-pressed="false">Mark done</button></div>
+    </section>
+
+
+    <!-- ============ PART II ============ -->
+    <section class="part" id="part-2">
+      <span class="eyebrow">Part two</span>
+      <h2>What the CPU actually sees</h2>
+      <p class="goal">Bytes, numbers, text, the stack and the heap — the five ideas under every program.</p>
+    </section>
+
+    <!-- ============ 4 ============ -->
+    <section class="lesson" id="ch4" data-lesson="4">
+      <div class="lesson-head">
+        <div class="lesson-num">4</div>
+        <div>
+          <h2>Everything is bytes</h2>
+          <p class="goal">A number is a pattern of bits; the type says how to read it.</p>
+        </div>
+      </div>
+
+      <p>Brick's <code class="inline">int</code> is 64 bits and becomes
+        <code class="inline">int64_t</code> in C. That is a choice, not a law. Run this C
+        program and look at the sizes:</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">bytes.c</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>#include &lt;stdio.h&gt;
+#include &lt;stdint.h&gt;
+#include &lt;string.h&gt;
+
+int main(void)
+{
+    int32_t  minus_one = -1;
+    unsigned char *bytes = (unsigned char *)&amp;minus_one;
+    uint32_t ordered = 0x01020304;
+    unsigned char *order = (unsigned char *)&amp;ordered;
+    float    tenth = 0.1f;
+    uint32_t bits;
+    char     word[] = "Brick";
+
+    memcpy(&amp;bits, &amp;tenth, sizeof bits);
+
+    printf("sizeof(char)=%zu int=%zu long=%zu int64_t=%zu void*=%zu\n",
+           sizeof(char), sizeof(int), sizeof(long), sizeof(int64_t), sizeof(void *));
+    printf("-1 as unsigned = %u\n", (unsigned)minus_one);
+    printf("its bytes, low to high: %02x %02x %02x %02x\n",
+           bytes[0], bytes[1], bytes[2], bytes[3]);
+    printf("0x01020304 in memory, low to high: %02x %02x %02x %02x\n",
+           order[0], order[1], order[2], order[3]);
+    printf("0.1f stored as bits: %08x\n", bits);
+    printf("0.1 as a double, printed exactly: %.17g\n", 0.1);
+    printf("\"Brick\": strlen=%zu, sizeof the array=%zu\n",
+           strlen(word), sizeof word);
+    for (size_t i = 0; i &lt; sizeof word; i++) {
+        printf("  byte %zu = %3d  %#04x\n", i, word[i], (unsigned char)word[i]);
+    }
+    return 0;
+}</code></pre>
+      </div>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">terminal</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>$ cc -O0 -o bytes bytes.c &amp;&amp; ./bytes
+sizeof(char)=1 int=4 long=8 int64_t=8 void*=8
+-1 as unsigned = 4294967295
+its bytes, low to high: ff ff ff ff
+0x01020304 in memory, low to high: 04 03 02 01
+0.1f stored as bits: 3dcccccd
+0.1 as a double, printed exactly: 0.10000000000000001
+"Brick": strlen=5, sizeof the array=6
+  byte 0 =  66  0x42
+  byte 1 = 114  0x72
+  byte 2 = 105  0x69
+  byte 3 =  99  0x63
+  byte 4 = 107  0x6b
+  byte 5 =   0  0000</code></pre>
+      </div>
+
+      <h3>Negative numbers</h3>
+
+      <p><code class="inline">-1</code> in a 32-bit <code class="inline">int</code> is
+        <code class="inline">0xffffffff</code> — all ones. That is not a sign bit bolted on;
+        it is two's complement, where <code class="inline">-x</code> is
+        <code class="inline">~x + 1</code>. The payoff is that addition needs no special
+        case: 1 + (−1) is <code class="inline">0001 + 1111</code>, which wraps to zero. In
+        64-bit Brick, the same −1 is eight <code class="inline">ff</code> bytes.</p>
+
+      <h3>Byte order</h3>
+
+      <p><code class="inline">0x01020304</code> in memory reads
+        <code class="inline">04 03 02 01</code>, lowest byte first. x86-64 is
+        <em>little-endian</em>. This matters when you read a file format or a network
+        packet that stores integers the other way round (big-endian), and it is why
+        functions like <code class="inline">htonl</code> exist.</p>
+
+      <h3>Fractions</h3>
+
+      <p><code class="inline">0.1f</code> is stored as the bits
+        <code class="inline">3dcccccd</code>, and printing a
+        <code class="inline">double</code> with enough digits shows the truth:</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">output</span></div>
+        <pre><code>0.10000000000000001</code></pre>
+      </div>
+
+      <p>There is no exact binary fraction for 0.1, just as there is no exact decimal
+        fraction for 1/3. Every “0.1 + 0.2 ≠ 0.3” mystery in every language comes from
+        this one fact. Brick inherits it because a Brick
+        <code class="inline">float</code> is a C <code class="inline">double</code>.</p>
+
+      <div class="note">
+        <strong>Rules that follow.</strong> Never compare two floats for equality.
+        Compare the difference against a small number. And when precision matters — money,
+        measurements that must add up — store an integer number of cents or grams, not a
+        float.
+      </div>
+
+      <div class="done-row"><button type="button" data-done="4" aria-pressed="false">Mark done</button></div>
+    </section>
+
+    <!-- ============ 5 ============ -->
+    <section class="lesson" id="ch5" data-lesson="5">
+      <div class="lesson-head">
+        <div class="lesson-num">5</div>
+        <div>
+          <h2>Text is bytes with a zero at the end</h2>
+          <p class="goal">C's string convention, and what it costs.</p>
+        </div>
+      </div>
+
+      <p>The last six lines of the previous output are the whole story of C strings.
+        <code class="inline">"Brick"</code> is five letters plus a sixth byte, zero. There is
+        no length stored anywhere:</p>
+
+      <pre class="chain">  B    r    i    c    k    \0
+ 0x42 0x72 0x69 0x63 0x6b 0x00</pre>
+
+      <p>So <code class="inline">strlen</code> walks until it finds a zero. That is why it is
+        O(n), and why it is called again and again in naive code. Brick's
+        <code class="inline">text</code> is exactly this: a
+        <code class="inline">const char *</code>. The generated C shows it plainly:</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">text.brick</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>function main() {
+    var word = "Brick"
+    print(word.len)
+    print(word[0])
+    print(slice(word, 0, 2))
+    print(word + "!")
+    var copy = word
+    print(copy == word)
+}</code></pre>
+      </div>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">./bin/brick emit text.brick</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>int main(void)
+{
+    const char* word = "Brick";
+    printf("%lld\n", (long long)(((int64_t)strlen(word))));
+    printf("%lld\n", (long long)(((int64_t)(unsigned char)(word)[0])));
+    printf("%s\n", (brick_text_slice(word, 0, 2)));
+    printf("%s\n", (brick_text_concat(word, "!")));
+    const char* copy = word;
+    printf("%s\n", ((strcmp(copy, word) == 0)) ? "true" : "false");
+    return 0;
+}</code></pre>
+      </div>
+
+      <p>And the output:</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">output</span></div>
+        <pre><code>5
+66
+Br
+Brick!
+true</code></pre>
+      </div>
+
+      <p>Three separate costs hide in those five statements:</p>
+      <ol>
+        <li><code class="inline">word.len</code> becomes <code class="inline">strlen(word)</code>.
+          Every time. In a loop, that is O(n²). Cache it in a
+          <code class="inline">var</code> — Brick's own compiler had a 70× speedup from
+          exactly this fix.</li>
+        <li><code class="inline">slice(word, 0, 2)</code> allocates and copies two bytes plus a
+          zero. The result is independent of the original.</li>
+        <li><code class="inline">word + "!"</code> allocates a new buffer and copies both
+          sides. Ten concatenations in a loop copy the growing text ten times; that is what
+          <code class="inline">Builder</code> exists to avoid.</li>
+      </ol>
+
+      <h3>Unicode: one character, several bytes</h3>
+
+      <p><code class="inline">"é"</code> is one character to a reader and two bytes to the
+        machine: <code class="inline">0xc3 0xa9</code> in UTF-8. So
+        <code class="inline">.len</code> is a byte count, not a character count, and
+        <code class="inline">s[i]</code> gives you one byte — which may be half of a
+        character. English text is one byte per letter, so the difference is invisible until
+        it isn't.</p>
+
+      <div class="note tip">
+        <strong>When text cannot be text.</strong> A zero byte ends a C string, so
+        <code class="inline">text</code> cannot hold arbitrary binary data. Brick's
+        <code class="inline">bytes</code> type carries its own length and can hold
+        <code class="inline">0</code>, newlines, anything 0–255. Use
+        <code class="inline">to_bytes</code> / <code class="inline">to_text</code> at the
+        boundary, and <code class="inline">bytes(List(int))</code> when you need to build
+        one.
+      </div>
+
+      <div class="done-row"><button type="button" data-done="5" aria-pressed="false">Mark done</button></div>
+    </section>
+
+    <!-- ============ 6 ============ -->
+    <section class="lesson" id="ch6" data-lesson="6">
+      <div class="lesson-head">
+        <div class="lesson-num">6</div>
+        <div>
+          <h2>Functions and the stack</h2>
+          <p class="goal">A call is a jump plus a small, strictly ordered piece of memory.</p>
+        </div>
+      </div>
+
+      <p>Compile a tiny C function without optimization and read what the compiler
+        wrote:</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">add.c → add.s</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>int add(int a, int b) { return a + b; }</code></pre>
+      </div>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">cc -O0 -S</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>add:
+    pushq   %rbp
+    movq    %rsp, %rbp
+    movl    %edi, -4(%rbp)     # a lives at rbp-4
+    movl    %esi, -8(%rbp)     # b lives at rbp-8
+    movl    -4(%rbp), %edx
+    movl    -8(%rbp), %eax
+    addl    %edx, %eax         # result in eax
+    popq    %rbp
+    ret</code></pre>
+      </div>
+
+      <p>The x86-64 calling convention (System V) says: the first six integer arguments
+        arrive in <code class="inline">rdi, rsi, rdx, rcx, r8, r9</code>; the return value
+        leaves in <code class="inline">rax</code>; the stack must be aligned. Everything
+        else is a convention the compiler and libc both obey.</p>
+
+      <p>Draw the stack while <code class="inline">main</code> calls
+        <code class="inline">add</code>:</p>
+
+      <pre class="chain">   higher addresses
+   ┌──────────────────┐
+   │  main's frame    │  locals, saved registers
+   ├──────────────────┤
+   │  return address  │  where to go back to
+   ├──────────────────┤ ← rbp of add
+   │  saved rbp       │
+   ├──────────────────┤
+   │  a = 2           │  rbp-4
+   │  b = 3           │  rbp-8
+   ├──────────────────┤ ← rsp
+   └──────────────────┘
+   lower addresses</pre>
+
+      <p>A function call is therefore: put arguments in registers, <code class="inline">call</code>
+        (which pushes the return address), move <code class="inline">rsp</code> down for
+        locals, run, put the result in <code class="inline">rax</code>,
+        <code class="inline">ret</code> (which pops the return address). Recursion works
+        because each call gets a fresh frame. It fails when the frames run out: the stack is
+        only so big (<code class="inline">ulimit -s</code> says 8,192 KiB here), and the
+        guard page below it turns the overflow into a segmentation fault.</p>
+
+      <h3>Passing a value versus lending an address</h3>
+
+      <p>In Brick, <code class="inline">&amp;mut</code> means “pass the address, do not
+        copy”. That is a C pointer, and the emitted code says so:</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">emit examples/point.brick</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>static void move(Point* p)
+{
+    (p)-&gt;x = ((p)-&gt;x + 1);
+    (p)-&gt;y = ((p)-&gt;y + 1);
+}
+
+int main(void)
+{
+    Point a = (Point){ .x = 1, .y = 2 };
+    move((&amp;(a)));
+    printf("%lld\n", (long long)((a).x));
+    printf("%lld\n", (long long)((a).y));
+    return 0;
+}</code></pre>
+      </div>
+
+      <p>The difference between <code class="inline">Point p</code> and
+        <code class="inline">Point *p</code> is the difference between editing a photocopy
+        and editing the original. Brick lets you borrow an address for the duration of a
+        call, then forgets it — which is why there are no lifetime annotations and no way to
+        keep a dangling pointer.</p>
+
+      <div class="note">
+        <strong>Why the stack is fast.</strong> Allocating a local is
+        <code class="inline">sub $N, %rsp</code>: one instruction, no bookkeeping. Freeing
+        it is <code class="inline">add $N, %rsp</code>. Nothing is searched, nothing is
+        locked, nothing can fragment. That is the whole trick.
+      </div>
+
+      <div class="done-row"><button type="button" data-done="6" aria-pressed="false">Mark done</button></div>
+    </section>
+
+    <!-- ============ 7 ============ -->
+    <section class="lesson" id="ch7" data-lesson="7">
+      <div class="lesson-head">
+        <div class="lesson-num">7</div>
+        <div>
+          <h2>The heap, and how a list grows</h2>
+          <p class="goal">malloc is a library, not an instruction. A List is four numbers and a pointer.</p>
+        </div>
+      </div>
+
+      <p>The stack is for things whose size is known when the function starts. A list
+        read from a file is not. It lives on the heap, and Brick's
+        <code class="inline">List(T)</code> is a tiny C struct:</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">from every generated file</span></div>
+        <pre><code>typedef struct
+{
+    void   *data;   /* the heap block                  */
+    int64_t len;    /* number of elements in use       */
+    int64_t cap;    /* allocated element capacity      */
+    int64_t elem;   /* size of one element, in bytes   */
+} BrickList;</code></pre>
+      </div>
+
+      <p><code class="inline">List(int)</code> becomes
+        <code class="inline">brick_list_new(sizeof(int64_t))</code>: no allocation yet, just
+        the four fields. The first <code class="inline">push</code> allocates room for 8
+        elements. When those 8 are full, it asks for 16; then 32; then 64:</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">runtime</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>static inline void brick_list_grow(BrickList *list, int64_t needed)
+{
+    int64_t cap;
+
+    if (needed &lt;= list-&gt;cap) {
+        return;
+    }
+    cap = list-&gt;cap ? list-&gt;cap * BRICK_LIST_GROWTH_FACTOR
+                    : BRICK_LIST_INITIAL_CAPACITY;
+    if (cap &lt; needed) {
+        cap = needed;
+    }
+    list-&gt;data = brick_resize(list-&gt;data,
+                              (size_t)(list-&gt;cap * list-&gt;elem),
+                              (size_t)(cap * list-&gt;elem));
+    list-&gt;cap = cap;
+}</code></pre>
+      </div>
+
+      <p>Doubling is why pushing n items is O(n) in total, not O(n²): the copies are
+        1 + 2 + 4 + … + n ≈ 2n. It is also why a list's address never changes while its
+        <em>buffer's</em> address does. <code class="inline">realloc</code> may move the
+        block. Any raw pointer into it would become a use-after-free. Brick's answer is to
+        never give you one: you index with a number.</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">examples/list.brick → C</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>BrickList xs = brick_list_new(sizeof(int64_t));
+BRICK_PUSH(int64_t, (xs), (10));
+BRICK_PUSH(int64_t, (xs), (20));
+BRICK_PUSH(int64_t, (xs), (30));
+
+int64_t total = 0;
+int64_t i = 0;
+while ((i &lt; ((xs).len))) {
+    total = (total + (*(int64_t*)brick_list_at(&amp;(xs), i)));
+    i = (i + 1);
+}</code></pre>
+      </div>
+
+      <p><code class="inline">brick_list_at</code> checks both ends and calls
+        <code class="inline">exit(1)</code> with “brick: index out of bounds” if you are
+        outside. That check is why Brick can say “no buffer overflows” and still compile to
+        ordinary C. It costs one comparison and one branch per access — cheap next to the
+        memory read it guards.</p>
+
+      <h3>What malloc actually does</h3>
+
+      <p><code class="inline">malloc(16)</code> asks libc's allocator for 16 bytes. The
+        allocator keeps free lists, splits blocks, and calls the kernel only when its own
+        arena is exhausted — usually via <code class="inline">brk</code> or
+        <code class="inline">mmap</code>. It stores a small header before the block it
+        returns, which is how <code class="inline">free</code> knows the size. This is also
+        why a use-after-free can corrupt the allocator's own data structures rather than
+        crashing at the line you wrote.</p>
+
+      <div class="note">
+        <strong>Brick has no free.</strong> A short-lived program can leak and exit; the
+        kernel reclaims everything. A long-running server cannot. That is what the next
+        chapter is for.
+      </div>
+
+      <div class="done-row"><button type="button" data-done="7" aria-pressed="false">Mark done</button></div>
+    </section>
+
+    <!-- ============ 8 ============ -->
+    <section class="lesson" id="ch8" data-lesson="8">
+      <div class="lesson-head">
+        <div class="lesson-num">8</div>
+        <div>
+          <h2>Arenas: freeing in one sweep</h2>
+          <p class="goal">Move a pointer forward to allocate. Free the whole region at once.</p>
+        </div>
+      </div>
+
+      <p>Most data in a compiler, a server request or a file converter has the same
+        lifetime: it is created while handling one thing and is dead when that thing is
+        done. Tracking each allocation separately is wasted work. An arena makes the
+        lifetime explicit:</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">examples/arena.brick</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>function main() {
+    var total = 0
+
+    arena {
+        var xs = List(int)
+        var i = 0
+        while i &lt; 100 {
+            xs.push(i)
+            i = i + 1
+        }
+        var j = 0
+        while j &lt; xs.len {
+            total = total + xs[j]
+            j = j + 1
+        }
+    } // the memory for xs is released here
+
+    print(total) // 4950
+}</code></pre>
+      </div>
+
+      <p>The whole mechanism is this function in the runtime:</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">runtime (abridged)</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>static inline void *brick_arena_raw(size_t n)
+{
+    n = (n + 15u) &amp; ~(size_t)15u;   /* keep 16-byte alignment */
+    chunk = brick_arena_top-&gt;chunk;
+    if (chunk == NULL || chunk-&gt;used + n &gt; chunk-&gt;cap) {
+        cap = n &gt; BRICK_ARENA_CHUNK ? n : BRICK_ARENA_CHUNK;
+        chunk = malloc(sizeof(BrickArenaChunk) + cap);
+        chunk-&gt;prev = brick_arena_top-&gt;chunk;
+        chunk-&gt;used = 0;
+        chunk-&gt;cap  = cap;
+        brick_arena_top-&gt;chunk = chunk;
+    }
+    p = (char *)chunk + sizeof(BrickArenaChunk) + chunk-&gt;used;
+    chunk-&gt;used += n;
+    return p;
+}</code></pre>
+      </div>
+
+      <p>Allocation is an add and a comparison. Freeing walks the chain of 64 KiB
+        chunks and calls <code class="inline">free</code> once per chunk — not once per
+        object. For a compiler parsing one file, or a server answering one request, that is
+        the difference between thousands of <code class="inline">free</code> calls and
+        three.</p>
+
+      <p>The rule is as strict as it is simple: <strong>data allocated inside an arena
+        must not outlive the block.</strong> Brick enforces it by scope — the name
+        <code class="inline">xs</code> is not visible afterwards — but if you store a
+        pointer to arena memory in a longer-lived structure (through
+        <code class="inline">extern</code> C, say), the compiler cannot save you. The arena
+        is a promise, not a garbage collector.</p>
+
+      <div class="note tip">
+        <strong>When to use which.</strong> A value that lives for one function call: the
+        stack. A list whose size you learn at runtime and that must survive: the heap
+        (<code class="inline">List</code>, <code class="inline">Map</code>,
+        <code class="inline">Builder</code>). A whole request or parse: an arena. Reaching
+        for an arena first is usually right in systems code, and it is why Brick makes one a
+        keyword.
+      </div>
+
+      <div class="done-row"><button type="button" data-done="8" aria-pressed="false">Mark done</button></div>
+    </section>
+
+
+    <!-- ============ PART III ============ -->
+    <section class="part" id="part-3">
+      <span class="eyebrow">Part three</span>
+      <h2>Talking to the operating system</h2>
+      <p class="goal">Files, descriptors, processes and signals — the interface every program uses.</p>
+    </section>
+
+    <!-- ============ 9 ============ -->
+    <section class="lesson" id="ch9" data-lesson="9">
+      <div class="lesson-head">
+        <div class="lesson-num">9</div>
+        <div>
+          <h2>System calls: the only door out</h2>
+          <p class="goal">Your program cannot touch a disk, a screen or another process by itself.</p>
+        </div>
+      </div>
+
+      <p>The CPU has (at least) two modes. In <em>user mode</em> your code can do
+        arithmetic, read and write its own memory, and jump around — and nothing else.
+        Opening a file, sending a byte to a terminal, asking for more memory, starting a
+        program: all of that is kernel work, reached through one narrow door called a
+        system call.</p>
+
+      <p>On x86-64 the door has a number:</p>
+
+      <table class="cheat">
+        <thead><tr><th>Number</th><th>Name</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td>0</td><td><code>read</code></td><td>bytes from a descriptor into a buffer</td></tr>
+          <tr><td>1</td><td><code>write</code></td><td>bytes from a buffer to a descriptor</td></tr>
+          <tr><td>2</td><td><code>open</code></td><td>turn a path into a descriptor</td></tr>
+          <tr><td>3</td><td><code>close</code></td><td>release a descriptor</td></tr>
+          <tr><td>9</td><td><code>mmap</code></td><td>map memory or a file into the address space</td></tr>
+          <tr><td>12</td><td><code>brk</code></td><td>move the end of the heap</td></tr>
+          <tr><td>59</td><td><code>execve</code></td><td>replace this process with a program</td></tr>
+          <tr><td>231</td><td><code>exit_group</code></td><td>end the process with a status</td></tr>
+        </tbody>
+      </table>
+
+      <p>The instruction is literally <code class="inline">syscall</code>: put the number in
+        <code class="inline">rax</code>, the arguments in
+        <code class="inline">rdi, rsi, rdx, r10, r8, r9</code>, execute it, and read the
+        result back from <code class="inline">rax</code>. A negative result means an error,
+        with the reason in <code class="inline">errno</code>.</p>
+
+      <p>You rarely write that instruction. libc provides a function for each call, and
+        Brick's <code class="inline">extern</code> can call any of them directly. Here is
+        <code class="inline">write</code> from Brick, with no <code class="inline">print</code>
+        in sight:</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">direct.brick</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>extern function write(fd: int, data: text, n: int) -&gt; int
+
+function main() {
+    var message = "straight to fd 1\n"
+    write(1, message, message.len)
+}</code></pre>
+      </div>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">./bin/brick emit direct.brick</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>int64_t write(int64_t fd, const char* data, int64_t n);
+
+int main(void)
+{
+    const char* message = "straight to fd 1\n";
+    printf("%lld\n", (long long)(write(1, message, ((int64_t)strlen(message)))));
+    return 0;
+}</code></pre>
+      </div>
+
+      <p>The trace of this program contains exactly one
+        <code class="inline">write</code>, and it happens immediately. The trace of a
+        <code class="inline">print</code> program contains the same call, but later and with
+        a different buffer — because <code class="inline">print</code> goes through C's
+        buffered I/O first. That distinction is the next two chapters.</p>
+
+      <div class="note">
+        <strong>What a system call costs.</strong> Entering the kernel means switching
+        stacks, saving registers and flushing the CPU's fast caches of user state. On this
+        machine a <code class="inline">write</code> is on the order of a microsecond; a
+        function call is on the order of a nanosecond. This is why every language buffers
+        output, and why “print in a loop” is always slower than “build a string, print
+        once.”
+      </div>
+
+      <div class="done-row"><button type="button" data-done="9" aria-pressed="false">Mark done</button></div>
+    </section>
+
+    <!-- ============ 10 ============ -->
+    <section class="lesson" id="ch10" data-lesson="10">
+      <div class="lesson-head">
+        <div class="lesson-num">10</div>
+        <div>
+          <h2>File descriptors are small integers</h2>
+          <p class="goal">0, 1, 2, and then the lowest free number. That is the whole idea.</p>
+        </div>
+      </div>
+
+      <p>The kernel does not hand you a file. It hands you a number — an index into a
+        per-process table. Three are open before <code class="inline">main</code> starts:</p>
+
+      <table class="cheat">
+        <thead><tr><th>Descriptor</th><th>Name</th><th>Normally connected to</th></tr></thead>
+        <tbody>
+          <tr><td>0</td><td>standard input</td><td>your keyboard</td></tr>
+          <tr><td>1</td><td>standard output</td><td>your terminal</td></tr>
+          <tr><td>2</td><td>standard error</td><td>your terminal (unbuffered)</td></tr>
+        </tbody>
+      </table>
+
+      <p>Open a file and you get the lowest number that is free. Prove it:</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">fd.brick</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>extern function open(path: text, flags: int, mode: int) -&gt; int
+extern function close(fd: int) -&gt; int
+extern function write(fd: int, data: text, n: int) -&gt; int
+extern function getpid() -&gt; int
+extern function dup(fd: int) -&gt; int
+
+function main() {
+    print("pid:")
+    print(getpid())
+
+    var fd = open("/tmp/sysdocs/out.txt", 577, 420)
+    print("new fd:")
+    print(fd)
+
+    var message = "written through fd 3\n"
+    print(write(fd, message, message.len))
+    close(fd)
+
+    var copy = dup(1)
+    print("dup of stdout:")
+    print(copy)
+    var direct = "plain syscall, no stdio\n"
+    write(copy, direct, direct.len)
+}</code></pre>
+      </div>
+
+      <p><code class="inline">577</code> is <code class="inline">O_WRONLY | O_CREAT | O_TRUNC</code>
+        (1 + 64 + 512) and <code class="inline">420</code> is mode 0644. On this machine the
+        output was:</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">output</span></div>
+        <pre><code>pid:
+782745
+new fd:
+9
+21
+dup of stdout:
+9
+plain syscall, no stdio</code></pre>
+      </div>
+
+      <p>Why 9 and not 3? Because this session had descriptors 3 through 8 open already
+        (inherited from the terminal or the test harness). <em>The number is just the lowest
+        free slot</em> — in a clean shell you will usually see 3. The
+        <code class="inline">21</code> is the return value of
+        <code class="inline">write</code>: the number of bytes accepted, which is how you
+        know it worked. A return of −1 would mean it did not.</p>
+
+      <p><code class="inline">dup(1)</code> makes a second number for the same output, so
+        both 1 and 9 write to the terminal. That is the mechanism behind redirection:</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">terminal</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>$ ./countlines sample.txt &gt; out.txt     # the shell points fd 1 at a file
+$ ./countlines sample.txt | wc -c        # the shell points fd 1 at a pipe
+8</code></pre>
+      </div>
+
+      <p>In the second case the program never learns it is talking to
+        <code class="inline">wc</code> instead of a terminal. It writes to descriptor 1 and
+        the kernel routes the bytes. This is also why
+        <code class="inline">eprint</code> exists: it writes to descriptor 2, which survives
+        <code class="inline">&gt;</code> redirection, so error messages still reach the
+        user.</p>
+
+      <div class="done-row"><button type="button" data-done="10" aria-pressed="false">Mark done</button></div>
+    </section>
+
+    <!-- ============ 11 ============ -->
+    <section class="lesson" id="ch11" data-lesson="11">
+      <div class="lesson-head">
+        <div class="lesson-num">11</div>
+        <div>
+          <h2>Buffering: why output appears late</h2>
+          <p class="goal">A printf is not a write. This chapter explains the strangest ordering bug you will meet.</p>
+        </div>
+      </div>
+
+      <p>libc keeps a buffer for each output stream. <code class="inline">printf</code>
+        formats into that buffer and returns; the buffer is handed to
+        <code class="inline">write</code> when it is full, when the program exits normally,
+        or when a line boundary is reached <em>and the destination is a terminal</em>.</p>
+
+      <p>Here is a program that uses both paths:</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">buffering.brick</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>extern function write(fd: int, data: text, n: int) -&gt; int
+
+function main() {
+    print("first")                    // through libc's buffer
+    var raw = "second\n"
+    write(1, raw, raw.len)            // straight to the kernel
+    print("third")                    // still in the buffer
+}</code></pre>
+      </div>
+
+      <p>Run it twice — once with a real terminal, once with output piped into another
+        program:</p>
+
+      <div class="duo">
+        <div class="code">
+          <div class="code-bar"><span class="name">on a terminal</span></div>
+          <pre><code>first
+second
+third</code></pre>
+        </div>
+        <div class="code">
+          <div class="code-bar"><span class="name">through a pipe</span></div>
+          <pre><code>second
+first
+third</code></pre>
+        </div>
+      </div>
+
+      <p>The bytes from <code class="inline">write</code> overtake the buffered ones. On a
+        terminal, “first\n” ends in a newline, so libc flushes immediately and the order
+        looks sane. In a pipe the buffer is not flushed until exit, so
+        <code class="inline">second</code> — which never entered the buffer — goes first.</p>
+
+      <p>This is a real, measurable property of the C library, not a Brick quirk. It
+        explains two everyday symptoms:</p>
+      <ul>
+        <li>A program that prints a progress message, then crashes, shows nothing. The
+          message was still in the buffer. (We will see exactly this in chapter 14.)</li>
+        <li>Adding <code class="inline">fflush(stdout)</code> after a message makes it appear
+          immediately, even into a pipe.</li>
+      </ul>
+
+      <div class="note">
+        <strong>The rule.</strong> Descriptor 2 (standard error) is unbuffered by default.
+        If a message must appear before a crash — “writing file…”, “connecting…” — send it
+        to stderr with <code class="inline">eprint</code>, or flush explicitly.
+      </div>
+
+      <div class="done-row"><button type="button" data-done="11" aria-pressed="false">Mark done</button></div>
+    </section>
+
+    <!-- ============ 12 ============ -->
+    <section class="lesson" id="ch12" data-lesson="12">
+      <div class="lesson-head">
+        <div class="lesson-num">12</div>
+        <div>
+          <h2>Files: names, inodes, offsets</h2>
+          <p class="goal">A filename is a label. The file is an inode. The descriptor remembers where you are.</p>
+        </div>
+      </div>
+
+      <p>Consider a program that counts lines — the smallest useful Unix tool:</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">countlines.brick</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>function main() {
+    var argv = args()
+    if argv.len &lt; 2 {
+        eprint("usage: countlines &lt;file&gt;")
+        exit(2)
+    }
+
+    var text = read_file(argv[1])
+    var lines = 0
+    var i = 0
+    var n = text.len
+    while i &lt; n {
+        if text[i] == '\n' {
+            lines = lines + 1
+        }
+        i = i + 1
+    }
+    print(to_text(lines) + " lines")
+}</code></pre>
+      </div>
+
+      <p>Trace it and the filesystem appears as a short conversation:</p>
+
+      <div class="code trace">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">minitrace ./countlines sample.txt</span></div>
+        <pre><code>openat (0xffffffffffffff9c, 0x7ffd03d742ea, 0)
+            "sample.txt"
+fstat  (0x9, 0x7ffc52f1f7c0, 0x7feb0aea5ec0)
+fstat  (0x9, 0x7ffc52f1f8c0, 0x150)
+lseek  (0x9, 0, 0)
+read   (0x9, 0xc363240, 0xe)
+lseek  (0x9, 0xe, 0)
+close  (0x9, 0, 0x7feb0aea5ec0)
+fstat  (0x1, 0x7ffc52f1f830, 0x7feb0aea5ec0)
+write  (0x1, 0xc364270, 0x8)
+3 lines</code></pre>
+      </div>
+
+      <p>What each line did:</p>
+      <ol>
+        <li><code class="inline">openat</code> turned the path into descriptor 9. The
+          directory descriptor <code class="inline">AT_FDCWD</code> means “start from the
+          current directory”.</li>
+        <li><code class="inline">fstat</code> asked for the file's metadata. libc's
+          <code class="inline">fopen</code> does this to choose a buffer size and learn the
+          file type.</li>
+        <li><code class="inline">lseek(9, 0, SEEK_END)</code> and back: Brick's
+          <code class="inline">read_file</code> asks for the size first, then for the
+          bytes. That is why there are two seeks.</li>
+        <li><code class="inline">read(9, buf, 14)</code>: fourteen bytes — the whole file.</li>
+        <li><code class="inline">close(9)</code>: descriptor 9 is free again.</li>
+        <li><code class="inline">write(1, buf, 8)</code>: the eight bytes of “3 lines\n”.</li>
+      </ol>
+
+      <h3>The file is not the name</h3>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">terminal</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>$ ls -li sample.txt
+162402 -rw-r--r--. 1 amritrai amritrai 14 Nov  7 22:24 sample.txt
+$ stat -c 'mode=%A (%a) links=%h size=%s inode=%i' sample.txt
+mode=-rw-r--r-- (644) links=1 size=14 inode=162402</code></pre>
+      </div>
+
+      <p>The number <code class="inline">162402</code> is the inode: the actual object on
+        disk. A name is a directory entry pointing at an inode. That is why:</p>
+      <ul>
+        <li>Two names can be the same file (a hard link). The link count says how many.</li>
+        <li><code class="inline">rm</code> removes a name, not a file. The blocks are freed
+          when the last name and the last open descriptor are gone.</li>
+        <li>A file can be open with no name at all — that is what a temporary file often
+          is.</li>
+        <li><code class="inline">0644</code> is <code class="inline">rw- r-- r--</code>:
+          owner reads and writes, everyone else reads. The process's user id decides which
+          column applies. Root bypasses most of it.</li>
+      </ul>
+
+      <div class="note tip">
+        <strong>The offset is per descriptor.</strong> Open the same file twice and each
+        descriptor has its own position. <code class="inline">read</code> advances it;
+        <code class="inline">lseek</code> moves it. This is why two processes can read the
+        same file without interfering, and why appending with
+        <code class="inline">O_APPEND</code> is safer than “seek to the end, then write”.
+      </div>
+
+      <div class="done-row"><button type="button" data-done="12" aria-pressed="false">Mark done</button></div>
+    </section>
+
+    <!-- ============ 13 ============ -->
+    <section class="lesson" id="ch13" data-lesson="13">
+      <div class="lesson-head">
+        <div class="lesson-num">13</div>
+        <div>
+          <h2>Processes: fork, exec, wait</h2>
+          <p class="goal">A process is a program in motion, with an id, a status and a parent.</p>
+        </div>
+      </div>
+
+      <p>Starting a program takes two calls, not one. <code class="inline">fork</code>
+        duplicates the current process — same memory, same descriptors, now two returns.
+        <code class="inline">execve</code> then replaces the child's memory with a new
+        program. The parent waits for the child to finish and collects its status.</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">fork.c</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>#include &lt;stdio.h&gt;
+#include &lt;unistd.h&gt;
+#include &lt;sys/wait.h&gt;
+
+int main(void)
+{
+    pid_t pid = fork();
+
+    if (pid == 0) {
+        printf("child:  pid=%d  parent=%d\n", getpid(), getppid());
+        _exit(7);
+    }
+
+    int status = 0;
+    waitpid(pid, &amp;status, 0);
+    printf("parent: pid=%d  child=%d  exited=%d  code=%d\n",
+           getpid(), pid, WIFEXITED(status), WEXITSTATUS(status));
+    return 0;
+}</code></pre>
+      </div>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">terminal</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>$ cc -O0 -o forkc fork.c &amp;&amp; ./forkc
+child:  pid=783915  parent=783903
+parent: pid=783903  child=783915  exited=1  code=7</code></pre>
+      </div>
+
+      <p>Notice that <code class="inline">fork</code> returned twice: 0 in the child, the
+        child's id in the parent. The child exited with 7; the parent decoded that as
+        “exited normally, code 7”. A status is not a plain integer: the low byte is the exit
+        code, and the high bits say whether it exited or was killed by a signal.</p>
+
+      <p>Brick does not expose <code class="inline">fork</code> — deliberately. Its
+        <code class="inline">system()</code> does the fork/exec/wait dance for you and
+        returns the child's exit status:</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">examples/system.brick</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>var ok = List(text)
+ok.push("true")
+print(system(ok))
+
+var bad = List(text)
+bad.push("false")
+print(system(bad))</code></pre>
+      </div>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">output</span></div>
+        <pre><code>0
+1</code></pre>
+      </div>
+
+      <p>There is no shell in between, so each argument is passed exactly as written — no
+        globbing, no quoting, no <code class="inline">|</code>. That is a feature: it is one
+        less language to escape.</p>
+
+      <h3>What a process leaves behind</h3>
+      <ul>
+        <li><strong>Exit status</strong> — 0 means success by convention, any other number is
+          yours to define. The shell shows it as <code class="inline">$?</code>.</li>
+        <li><strong>A zombie</strong> — an exited child whose status has not been collected.
+          It holds an entry in the process table, nothing else. <code class="inline">wait</code>
+          reaps it. Long-running programs that spawn children and never wait accumulate
+          zombies.</li>
+        <li><strong>An orphan</strong> — a child whose parent died first. It is re-parented
+          to init (or a subreaper), which reaps it.</li>
+      </ul>
+
+      <div class="note">
+        <strong>Why no threads in this guide.</strong> A thread is a second stack in the
+        same address space with its own registers. That is powerful and it introduces data
+        races, atomics and locks — a whole second language of rules. Brick's model today is
+        one process, one thread; when it grows threads, this chapter will grow a second
+        half.
+      </div>
+
+      <div class="done-row"><button type="button" data-done="13" aria-pressed="false">Mark done</button></div>
+    </section>
+
+    <!-- ============ 14 ============ -->
+    <section class="lesson" id="ch14" data-lesson="14">
+      <div class="lesson-head">
+        <div class="lesson-num">14</div>
+        <div>
+          <h2>Signals: when the kernel interrupts you</h2>
+          <p class="goal">Not every ending is a return. Some are a knock on the door you cannot decline.</p>
+        </div>
+      </div>
+
+      <p>A signal is an asynchronous notification delivered by the kernel. Most of them
+        kill the process and set its exit status to 128 + the signal number. The common
+        ones:</p>
+
+      <table class="cheat">
+        <thead><tr><th>Signal</th><th>Number</th><th>Comes from</th><th>Shell shows</th></tr></thead>
+        <tbody>
+          <tr><td><code>SIGINT</code></td><td>2</td><td>Ctrl-C</td><td>130</td></tr>
+          <tr><td><code>SIGSEGV</code></td><td>11</td><td>bad memory access</td><td>139</td></tr>
+          <tr><td><code>SIGTERM</code></td><td>15</td><td><code>kill</code></td><td>143</td></tr>
+          <tr><td><code>SIGKILL</code></td><td>9</td><td><code>kill -9</code></td><td>137</td></tr>
+        </tbody>
+      </table>
+
+      <p>Here is a Brick program that asks for <code class="inline">SIGSEGV</code> on
+        purpose:</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">crash.brick</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>extern function raise(signal: int) -&gt; int
+
+function main() {
+    print("about to die")
+    raise(11)          // 11 is SIGSEGV
+    print("never reached")
+}</code></pre>
+      </div>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">terminal</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>$ ./crash
+Segmentation fault (core dumped)
+$ echo $?
+139
+$ ./crash &gt; out.txt
+$ ls -l out.txt
+-rw-r--r--. 1 amritrai amritrai 0 ...</code></pre>
+      </div>
+
+      <p>Two lessons in four lines:</p>
+      <ol>
+        <li><strong>“about to die” never appeared</strong>, and the redirected file is empty.
+          The text was still in libc's buffer when the signal killed the process. There is
+          no return from a signal like this: no flush, no cleanup.</li>
+        <li><strong>139 = 128 + 11.</strong> The shell reports signals this way so that a
+          single number can mean either “exited with code 139” or “died of signal 11” —
+          and those are different things. <code class="inline">WIFSIGNALED</code> tells them
+          apart in C.</li>
+      </ol>
+
+      <p>A core dump is a snapshot of the memory at the moment of death, written to disk
+        (or piped to a handler). <code class="inline">gdb ./crash core</code> then
+        <code class="inline">bt</code> shows the stack. Most systems disable cores by
+        default; <code class="inline">ulimit -c unlimited</code> enables them.</p>
+
+      <div class="note tip">
+        <strong>The practical rule.</strong> If a program dies with a status above 128,
+        think “signal”, not “error”. 137 almost always means the out-of-memory killer chose
+        your process. 139 is a bad pointer. 130 is you pressing Ctrl-C.
+      </div>
+
+      <div class="done-row"><button type="button" data-done="14" aria-pressed="false">Mark done</button></div>
+    </section>
+
+    <!-- ============ 15 ============ -->
+    <section class="lesson" id="ch15" data-lesson="15">
+      <div class="lesson-head">
+        <div class="lesson-num">15</div>
+        <div>
+          <h2>Time, and why your program is never alone</h2>
+          <p class="goal">The kernel switches between processes many times a second. You cannot see it, but you can measure it.</p>
+        </div>
+      </div>
+
+      <p>Ask the shell how long a program took:</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">terminal</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>$ time ./countlines sample.txt
+3 lines
+
+real    0m0.001s
+user    0m0.000s
+sys     0m0.001s</code></pre>
+      </div>
+
+      <p>Three different clocks:</p>
+      <ul>
+        <li><strong>real</strong> — wall-clock time. Includes waiting for the disk, the
+          terminal and other processes.</li>
+        <li><strong>user</strong> — CPU time spent running your instructions.</li>
+        <li><strong>sys</strong> — CPU time spent inside the kernel on your behalf.</li>
+      </ul>
+
+      <p>Here real ≈ user + sys because the file was in the page cache. Run it on a cold,
+        large file and real will pull ahead: the process is asleep, waiting for the disk,
+        and the CPU is doing someone else's work.</p>
+
+      <h3>The scheduler</h3>
+
+      <p>Your program does not own the CPU. The kernel gives it a slice — typically a few
+        milliseconds — then saves its registers and switches to another runnable process.
+        The switch is invisible because it restores everything exactly. It is also why:</p>
+      <ul>
+        <li>A tight loop can be interrupted between any two instructions.</li>
+        <li>Two runs of the same program can differ in timing by an order of magnitude on a
+          busy machine.</li>
+        <li>“It worked when I measured it” is not a proof of speed. Measure ratios on the
+          same machine, many times, and distrust small differences.</li>
+      </ul>
+
+      <p>There are two notions of time in the kernel, and mixing them up causes real
+        bugs:</p>
+      <ul>
+        <li><strong>Wall clock</strong> (<code class="inline">CLOCK_REALTIME</code>) — what a
+          human calls the time. It can jump backwards when NTP corrects it.</li>
+        <li><strong>Monotonic clock</strong> (<code class="inline">CLOCK_MONOTONIC</code>) —
+          counts forward, never adjusts. Use it to measure intervals.</li>
+      </ul>
+
+      <p>Sleeping is not a loop. <code class="inline">sleep(1)</code> tells the kernel “do
+        not schedule me for at least a second”; the CPU is free for others, and your process
+        wakes on a timer interrupt. That is why a server can hold ten thousand idle
+        connections without ten thousand busy cores.</p>
+
+      <div class="note">
+        <strong>No real-time promises.</strong> A normal Linux process has no guarantee
+        about when it will run next. If you need “within 100 microseconds”, you need a
+        real-time scheduling class, locked memory and a tuned kernel — a different guide.
+        For everything in this one, “soon” is the contract.
+      </div>
+
+      <div class="done-row"><button type="button" data-done="15" aria-pressed="false">Mark done</button></div>
+    </section>
+
+
+    <!-- ============ PART IV ============ -->
+    <section class="part" id="part-4">
+      <span class="eyebrow">Part four</span>
+      <h2>Where your program comes from</h2>
+      <p class="goal">Five stages, one temporary C file, and a compiler that has to agree with itself.</p>
+    </section>
+
+    <!-- ============ 16 ============ -->
+    <section class="lesson" id="ch16" data-lesson="16">
+      <div class="lesson-head">
+        <div class="lesson-num">16</div>
+        <div>
+          <h2>Five stages: bytes to tokens to a tree to C</h2>
+          <p class="goal">The .brick file is never run. It is read four times and then thrown away.</p>
+        </div>
+      </div>
+
+      <p>Take the smallest program that still does something:</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">tiny.brick</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>function main() {
+    var n = 2 + 3
+    print(n)
+}</code></pre>
+      </div>
+
+      <pre class="chain">  tiny.brick   ──▶  lexer   ──▶  parser  ──▶  checker  ──▶  emitter  ──▶  tiny.c
+  bytes            tokens        tree         typed tree      text          bytes</pre>
+
+      <p>The compiler can stop after any of these stages and show you what it has. That
+        is the fastest way to learn how a compiler thinks, and the reason Brick has
+        <code class="inline">tokdump</code>, <code class="inline">ast</code> and
+        <code class="inline">typedump</code> as normal commands.</p>
+
+      <h3>Stage one: the lexer</h3>
+
+      <p>The lexer walks the raw bytes and groups them into tokens. It knows nothing
+        about meaning — only that <code class="inline">function</code> is one word and
+        <code class="inline">2</code> is a number. Run
+        <code class="inline">./bin/brick tokdump tiny.brick</code>:</p>
+
+      <div class="code trace">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">brick tokdump tiny.brick</span></div>
+        <pre><code>1 1 function 8 102 117 110 99 116 105 111 110
+1 10 IDENT 4 109 97 105 110
+1 14 ( 1 40
+1 15 ) 1 41
+1 17 { 1 123
+2 5 var 3 118 97 114
+2 9 IDENT 1 110
+2 11 = 1 61
+2 13 INT 1 50
+2 15 + 1 43
+2 17 INT 1 51
+3 5 IDENT 5 112 114 105 110 116
+3 10 ( 1 40
+3 11 IDENT 1 110
+3 12 ) 1 41
+4 1 } 1 125
+5 1 EOF 0</code></pre>
+      </div>
+
+      <p>Each line is <em>line column kind length bytes</em>. The bytes are decimal on
+        purpose: <code class="inline">109 97 105 110</code> is
+        <code class="inline">m a i n</code>. The lexer has not decided what
+        <code class="inline">main</code> means, whether <code class="inline">n</code> was
+        ever declared, or whether <code class="inline">+</code> is allowed in that
+        position. It has only cut the text at the seams.</p>
+
+      <p>One detail worth seeing: the token stream ends with
+        <code class="inline">EOF</code>. Every stage after this one can stop looking for
+        a closing <code class="inline">}</code> the moment it meets EOF, which is why
+        “unexpected end of file” is a real error message rather than a hang.</p>
+
+      <h3>Stage two: the parser</h3>
+
+      <p>The parser folds the flat token list into a tree — the shape the language's
+        grammar describes. <code class="inline">./bin/brick ast tiny.brick</code>:</p>
+
+      <div class="code trace">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">brick ast tiny.brick</span></div>
+        <pre><code>Function main() -&gt; void
+  Block
+    Var n
+      Binary +
+        Int 2
+        Int 3
+    ExprStmt
+      Call
+        callee:
+          Ident print
+        args:
+          Ident n</code></pre>
+      </div>
+
+      <p>Read the indentation as containment. The function contains a block; the block
+        contains a <code class="inline">Var</code> and an <code class="inline">ExprStmt</code>;
+        the <code class="inline">Var</code>'s initialiser is a
+        <code class="inline">Binary +</code> with two
+        <code class="inline">Int</code> children. The parentheses disappeared because
+        the grammar puts <code class="inline">+</code> between the numbers in the tree —
+        precedence is not a property of the text any more, it is a property of the
+        shape. That is the whole reason a parser exists.</p>
+
+      <p>The parser still does not know that <code class="inline">print</code> is a
+        function or that <code class="inline">n</code> is an int. It knows only that
+        <code class="inline">print</code> is an expression followed by an argument list,
+        which happens to be what a call looks like.</p>
+
+      <h3>Stage three: the checker</h3>
+
+      <p>The checker walks that tree carrying a table of names. When it sees
+        <code class="inline">var n = 2 + 3</code> it decides <code class="inline">n</code>
+        holds an int and remembers it. When it sees
+        <code class="inline">print(n)</code> it looks <code class="inline">n</code> up
+        and writes down its type next to the node. <code class="inline">./bin/brick typedump tiny.brick</code>:</p>
+
+      <div class="code trace">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">brick typedump tiny.brick</span></div>
+        <pre><code>2:15 Binary int
+2:13 Int int
+2:17 Int int
+3:10 Call void
+3:11 Ident int</code></pre>
+      </div>
+
+      <p>Line 3, column 10 is the call and it is <code class="inline">void</code>: it
+        produces nothing. Line 3, column 11 is the <code class="inline">n</code> inside
+        the parentheses and it is <code class="inline">int</code>. These two facts are
+        all the emitter needs — it will not look anything up again.</p>
+
+      <p>This is where errors come from, and they come with the source position because
+        the checker still holds the tree, and the tree still holds the positions the
+        lexer recorded:</p>
+
+      <div class="code trace">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">brick check bad.brick</span></div>
+        <pre><code>$ cat bad.brick
+function main() {
+    var x: int = "no"
+}
+$ ./bin/brick check bad.brick
+2:5: cannot assign text to "int" (no implicit conversion)
+$ echo $?
+1</code></pre>
+      </div>
+
+      <p>Note the exit status. A compiler that finds an error exits non-zero and writes
+        nothing; that contract is what lets <code class="inline">make</code> stop and
+        lets your editor show a red squiggle.</p>
+
+      <h3>Stage four: the emitter</h3>
+
+      <p>The emitter is a tree walk that prints C. It is the least clever stage and the
+        most important one to read, because the C it writes is the whole truth about
+        what your program does. For the five-line file above, the interesting part is
+        the last few lines of a 544-line output:</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">brick emit tiny.brick (excerpt)</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>int main(void)
+{
+    printf("%lld\n", (long long)((2 + 3)));
+    return 0;
+}</code></pre>
+      </div>
+
+      <p>Two things to notice. First, <code class="inline">print</code> became
+        <code class="inline">printf("%lld\n", …)</code> — a format string plus a cast,
+        because C's <code class="inline">printf</code> needs to be told the type of what
+        it prints and Brick's <code class="inline">print</code> does not. Second,
+        <code class="inline">2 + 3</code> is still there: Brick does not fold constants
+        at this stage, it leaves the addition for the C compiler, which will turn it
+        into the number 5 before any machine code exists.</p>
+
+      <h3>Stage five: a C compiler writes the machine code</h3>
+
+      <p>Brick has no assembler and no instruction selector for this path. It hands the
+        C file to whatever C compiler is on the machine:</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">what brick build runs</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>cc -std=c11 -O2 -Wall -Wno-unused-parameter /tmp/brick-1234.c -o tiny</code></pre>
+      </div>
+
+      <p>So there are two compilers in the room for every Brick program: Brick's, which
+        turns <code class="inline">.brick</code> into C, and the C compiler's, which turns
+        C into an ELF file. That is a deliberate trade. Brick gets to be small — 13,700
+        lines of Go for the whole pipeline, plus about 4,600 lines of Brick for its
+        self-hosted twin — and in exchange it inherits a mature optimiser and every
+        platform that C already runs on.</p>
+
+      <div class="note tip">
+        <strong>Why 544 lines of C for a 5-line program?</strong> Lines 1–536 are the
+        Brick runtime, written in plain C: the growable list, text helpers, the arena,
+        the map, the builder. They are static inline functions, so the C compiler
+        deletes every one your program does not call — the <code class="inline">tiny</code>
+        binary contains none of them. Read the runtime once and you have read the real
+        semantics of <code class="inline">List</code>, <code class="inline">text</code>
+        and <code class="inline">arena</code>, in C, with no magic in between.
+      </div>
+
+      <p>Brick also has a second backend that skips C and writes x86-64 machine code
+        directly — <code class="inline">./bin/brick run --target native hello.brick</code>.
+        It covers a subset of the language and exists to prove the front end is clean
+        enough to feed something other than a text emitter. The default is C, and for
+        the rest of this guide it is the only one that matters.</p>
+
+      <div class="done-row"><button type="button" data-done="16" aria-pressed="false">Mark done</button></div>
+    </section>
+
+    <!-- ============ 17 ============ -->
+    <section class="lesson" id="ch17" data-lesson="17">
+      <div class="lesson-head">
+        <div class="lesson-num">17</div>
+        <div>
+          <h2>From source to binary, in milliseconds</h2>
+          <p class="goal">What actually costs time, measured, so you know what to blame.</p>
+        </div>
+      </div>
+
+      <p>You run <code class="inline">./bin/brick run examples/hello.brick</code> and see
+        a greeting. Between those two things, this happens:</p>
+
+      <table class="cheat">
+        <thead><tr><th>Step</th><th>Work</th><th>Roughly</th></tr></thead>
+        <tbody>
+          <tr><td>read the file</td><td>one <code>open</code>, one <code>read</code>; it is in the page cache</td><td>~0.05 ms</td></tr>
+          <tr><td>lex, parse, check</td><td>a few thousand bytes of token and tree nodes, all in the heap</td><td>~0.2 ms</td></tr>
+          <tr><td>emit C</td><td>print 544 lines of text into a buffer</td><td>~0.1 ms</td></tr>
+          <tr><td>write the C file</td><td>one <code>write</code> to <code class="inline">/tmp</code></td><td>~0.1 ms</td></tr>
+          <tr><td><strong>C compiler</strong></td><td>start gcc, preprocess, optimise, assemble, link libc</td><td><strong>~50 ms</strong></td></tr>
+          <tr><td>run the binary</td><td>the <code>execve</code> from chapter 1</td><td>~1 ms</td></tr>
+        </tbody>
+      </table>
+
+      <p>The C compiler is 99% of it, every time. That is why
+        <code class="inline">brick build</code> feels instant for a small file and why it
+        stops feeling instant the moment one file includes a lot of code. Measured on
+        this machine, the whole <code class="inline">brick run</code> of hello is
+        <strong>0.072 s</strong> wall clock, of which the Brick front end is under a
+        millisecond.</p>
+
+      <p>Two consequences that surprise people:</p>
+
+      <ul>
+        <li><strong>Compilation is I/O plus process startup.</strong> gcc is a large
+          program; it has to be loaded, read its headers, and link. That fixed cost
+          dominates small programs.</li>
+        <li><strong>The interpreter has the opposite profile.</strong>
+          <code class="inline">brick interp</code> skips C entirely and walks the tree,
+          so it starts instantly and runs slowly. For a program that runs for a second,
+          compiled wins by a wide margin; for a one-off script, the interpreter can win
+          overall because there is no gcc in the loop.</li>
+      </ul>
+
+      <h3>What the binary is before it runs</h3>
+
+      <p>The C compiler leaves a file on disk with a header that says where its pieces
+        live. <code class="inline">readelf -SW tiny</code> lists the sections; the four
+        that matter here are:</p>
+
+      <div class="code trace">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">readelf -SW hello (excerpt)</span></div>
+        <pre><code>[15] .text    PROGBITS  0000000000401040  00001040  000116  00  AX  0   0  16
+[14] .rodata  PROGBITS  00000000004004a0  000004a0  00001e  00   A  0   0  4
+[24] .data    PROGBITS  0000000000403008  00003008  000008  00  WA  0   0  8
+[25] .bss     NOBITS    0000000000403010  00003010  000004  00  WA  0   0  4</code></pre>
+      </div>
+
+      <p>Read the flags column: <code class="inline">AX</code> is allocated and
+        executable (code), <code class="inline">A</code> is read-only data,
+        <code class="inline">WA</code> is writable data, and <code class="inline">NOBITS</code>
+        means the section occupies no space in the file at all — the kernel just zeroes
+        that range of memory when it loads. That is <code class="inline">.bss</code>: a
+        global you never initialise costs nothing on disk.</p>
+
+      <p>Two numbers to hold on to. The file is 16 KB on disk but
+        <code class="inline">size</code> reports about 1.6 KB of actual content
+        (text 1072, data 532, bss 4) — the rest is alignment padding and ELF headers.
+        And <code class="inline">.text</code> is 278 bytes for a program that calls
+        <code class="inline">printf</code>, because the printing lives in libc, not in
+        your file.</p>
+
+      <div class="note">
+        <strong>Nothing you write is a “program” on disk in the sense you imagine.</strong>
+        A binary is a container: a header, a table of sections, and the bytes of those
+        sections. Turning it into a running process is the kernel's job, and it is the
+        job described in chapters 1–3.
+      </div>
+
+      <div class="done-row"><button type="button" data-done="17" aria-pressed="false">Mark done</button></div>
+    </section>
+
+    <!-- ============ 18 ============ -->
+    <section class="lesson" id="ch18" data-lesson="18">
+      <div class="lesson-head">
+        <div class="lesson-num">18</div>
+        <div>
+          <h2>-O0, -O2, and what the optimiser may delete</h2>
+          <p class="goal">The same C can produce two programs that differ by 180×, because one of them does not exist.</p>
+        </div>
+      </div>
+
+      <p>Here is a loop that adds two hundred million numbers and prints the total:</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">wall.c</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>#include &lt;stdio.h&gt;
+int main(void) {
+    long s = 0;
+    for (long i = 0; i &lt; 200000000L; i++) s += i;
+    printf("%ld\n", s);
+    return 0;
+}</code></pre>
+      </div>
+
+      <p>Compile it twice, once with optimisation off and once with
+        <code class="inline">-O2</code>, and time them:</p>
+
+      <div class="code trace">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">same source, two builds</span></div>
+        <pre><code>$ gcc -O0 wall.c -o wall0 &amp;&amp; gcc -O2 wall.c -o wall2
+$ time ./wall0
+19999999900000000
+real    0m0.361s
+
+$ time ./wall2
+19999999900000000
+real    0m0.002s</code></pre>
+      </div>
+
+      <p>Both print the same number. One is 180 times faster. The reason is not a
+        better loop — there is no loop:</p>
+
+      <div class="code trace">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">objdump -d wall2 (main)</span></div>
+        <pre><code>0000000000401040 &lt;main&gt;:
+  401040: sub    $0x8,%rsp
+  401044: mov    $0x4004b8,%edi
+  401049: xor    %eax,%eax
+  40104b: movabs $0x470de4d98c1f00,%rsi
+  401055: call    printf@plt
+  40105a: xor    %eax,%eax
+  40105c: add    $0x8,%rsp
+  401060: ret</code></pre>
+      </div>
+
+      <p>Eight instructions, no jump, no counter. The optimiser proved the sum is a
+        constant and pushed <code class="inline">19999999900000000</code> — which is
+        <code class="inline">0x470de4d98c1f00</code> — straight into the register that
+        carries printf's second argument. The at <code class="inline">-O0</code> build
+        is 23 instructions of real loop.</p>
+
+      <p>This is worth internalising, because it changes what a benchmark means:</p>
+
+      <ul>
+        <li><strong>A timing with no work in it measures nothing.</strong> If the
+          optimiser removed your loop, you measured process startup.</li>
+        <li><strong>-O2 may change observable behaviour only if your C has undefined
+          behaviour.</strong> Signed overflow, reading past an array, using a pointer
+          after <code class="inline">free</code> — in those cases the optimiser is
+          allowed to assume the impossible never happens, and the resulting program can
+          differ from the one you wrote.</li>
+        <li><strong>Brick inherits this.</strong> Your <code class="inline">.brick</code>
+          file is compiled with <code class="inline">-O2</code>, so the bounds check on
+          a list index is a real check (it can fail), but a loop computing a constant is
+          not run.</li>
+      </ul>
+
+      <h3>Debug builds</h3>
+
+      <p>If you want to step through generated C in a debugger, you need the symbols and
+        the line mapping that optimisation removes. That is what
+        <code class="inline">-O0 -g</code> is for. The Brick compiler's own
+        <code class="inline">build</code> command uses <code class="inline">-O2</code>
+        because normal users want the fast binary; when you are chasing a bug in the
+        runtime, build the C by hand:</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">hand build, for debugging</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>./bin/brick emit prog.brick &gt; prog.c
+cc -std=c11 -O0 -g -Wall prog.c -o prog
+gdb ./prog</code></pre>
+      </div>
+
+      <p>Then <code class="inline">break main</code>, <code class="inline">next</code>,
+        and you are stepping through the same C you can read in
+        <code class="inline">prog.c</code>. There is no hidden layer: what gdb shows you
+        is what Brick emitted.</p>
+
+      <div class="done-row"><button type="button" data-done="18" aria-pressed="false">Mark done</button></div>
+    </section>
+
+    <!-- ============ 19 ============ -->
+    <section class="lesson" id="ch19" data-lesson="19">
+      <div class="lesson-head">
+        <div class="lesson-num">19</div>
+        <div>
+          <h2>Two compilers that must agree</h2>
+          <p class="goal">Brick compiles itself. That is a test, not a boast.</p>
+        </div>
+      </div>
+
+      <p>Brick's front end exists twice. Once in Go
+        (<code class="inline">internal/lexer</code>, <code class="inline">parser</code>,
+        <code class="inline">checker</code>, <code class="inline">codegen</code>) and
+        once in Brick itself (<code class="inline">selfhost/</code>):</p>
+
+      <div class="code trace">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">wc -l selfhost/*.brick</span></div>
+        <pre><code>  197 brickc.brick       the whole pipeline as one program
+  139 checker.brick
+ 1213 codegen.brick       emits C
+   32 emitter.brick       driver
+ 1747 frontend.brick      tokens, lexer, parser (the bulk)
+   52 lexer.brick
+  779 parser.brick
+   33 runtime.brick
+  465 tokens.brick</code></pre>
+      </div>
+
+      <p>Both implementations must produce <strong>byte-identical</strong> output. Not
+        equivalent, not similar — identical text. <code class="inline">make selfhost</code>
+        builds the Brick versions and diffs them against the Go ones over every example
+        and every selfhost source:</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">make selfhost (abridged)</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>./bin/brick build selfhost/lexer.brick   -o /tmp/brick-lex
+./bin/brick build selfhost/parser.brick  -o /tmp/brick-parse
+./bin/brick build selfhost/checker.brick -o /tmp/brick-check
+./bin/brick build selfhost/emitter.brick -o /tmp/brick-emit
+./bin/brick build selfhost/brickc.brick  -o /tmp/brickc
+
+for f in examples/*.brick selfhost/*.brick; do
+    diff &lt;(/tmp/brick-lex   "$f") &lt;(./bin/brick tokdump  "$f")
+    diff &lt;(/tmp/brick-parse "$f") &lt;(./bin/brick ast      "$f")
+    diff &lt;(/tmp/brick-check "$f") &lt;(./bin/brick typedump "$f")
+    diff &lt;(/tmp/brick-emit  "$f") &lt;(./bin/brick emit     "$f")
+    diff &lt;(/tmp/brickc      "$f" -o -) &lt;(./bin/brick emit "$f")
+done</code></pre>
+      </div>
+
+      <p>Why insist on identical text rather than just correct output? Because “correct”
+        is not checkable by a diff. Identical text is. If the two emitters disagree by
+        one space, one of them has a bug and you find out immediately, with the exact
+        file and the exact line. A self-hosting test that only checks that programs
+        still run is a test that passes while the compiler quietly changes meaning.</p>
+
+      <h3>The fixpoint</h3>
+
+      <p>There is a second, stronger property. <code class="inline">brickc</code> is the
+        whole Brick compiler, written in Brick. Build it with the Go compiler, then use
+        <em>that binary</em> to build itself again:</p>
+
+      <div class="code">
+        <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">stage 1 → stage 2 → stage 3</span><button type="button" data-copy>Copy</button></div>
+        <pre><code>./bin/brick build selfhost/brickc.brick -o brickc1   # Go-built compiler
+./brickc1 selfhost/brickc.brick -o brickc2            # Brick-built compiler
+./brickc2 selfhost/brickc.brick -o brickc3
+cmp brickc2 brickc3                                   # must be identical</code></pre>
+      </div>
+
+      <p>When <code class="inline">brickc2</code> and <code class="inline">brickc3</code>
+        are the same bytes, the compiler has reached a <strong>fixpoint</strong>: feeding
+        it its own source produces itself. That is the difference between a language that
+        <em>can</em> compile itself and a language that <em>does</em>. It also means the
+        language is now defined by its own source code, not by the Go implementation —
+        the Go version becomes a bootstrap step, the way a match lights a fire.</p>
+
+      <div class="note">
+        <strong>Why this matters for you, the programmer.</strong> A compiler bug that
+        only shows up in its own source is the hardest kind to find, because the buggy
+        compiler is compiling the code that contains the bug. The fixpoint test is the
+        tripwire: if a change makes the compiler emit slightly different C for its own
+        source, <code class="inline">cmp</code> fails and you know before it reaches
+        anyone else.
+      </div>
+
+      <h3>What this says about Brick's design</h3>
+
+      <p>The language is small enough to be implemented twice by one person, and both
+        implementations can be compared mechanically. That is the practical value of
+        having no macros, no templates and no undefined-behaviour-dependent features: a
+        second implementation is a weekend, not a decade, and every feature you add has
+        to be implemented twice or the build fails. The constraint keeps the language
+        honest.</p>
+
+      <div class="done-row"><button type="button" data-done="19" aria-pressed="false">Mark done</button></div>
+    </section>
+
+    <!-- ============ APPENDIX ============ -->
+    <section class="part" id="appendix">
+      <span class="eyebrow">Appendix</span>
+      <h2>The tracer, and the commands behind every number</h2>
+      <p class="goal">Nothing in this guide is quoted from memory. Here is how it was measured.</p>
+    </section>
+
+    <section class="lesson" id="appendix-tracer" data-lesson="20">
+      <div class="lesson-head">
+        <div class="lesson-num">A</div>
+        <div>
+          <h2>minitrace: 140 lines to watch a program talk to the kernel</h2>
+          <p class="goal">strace is a program like any other. Here is one, small enough to read.</p>
+        </div>
+      </div>
+
+      <p>A traced process is stopped by the kernel at every system call boundary, and
+        the tracer is told. <code class="inline">ptrace</code> is the interface that makes
+        this possible; it is the same one gdb uses. Three calls do all the work:</p>
+
+      <ul>
+        <li><code class="inline">PTRACE_TRACEME</code> — the child says “trace me” before
+          it calls <code class="inline">execvp</code>, so the trace survives the exec.</li>
+        <li><code class="inline">PTRACE_SYSCALL</code> — resume the child until it enters
+          or leaves a system call.</li>
+        <li><code class="inline">PTRACE_GETREGS</code> — read its registers, where the
+          syscall number sits in <code class="inline">orig_rax</code> and the arguments
+          in <code class="inline">rdi</code>, <code class="inline">rsi</code>,
+          <code class="inline">rdx</code>.</li>
+      </ul>
+
+      <p>Each stop is reported twice — once entering, once leaving — which is why the
+        loop keeps an <code class="inline">entering</code> flag. Signals other than the
+        synthetic <code class="inline">SIGTRAP|0x80</code> are ignored, otherwise a
+        <code class="inline">SIGCHLD</code> would print as a fake syscall.</p>
+
+      <details>
+        <summary>minitrace.c — click to open the full source</summary>
+        <div class="code">
+          <div class="code-bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">minitrace.c</span><button type="button" data-copy>Copy</button></div>
+          <pre><code>/*
+ * minitrace — a very small strace.
+ *
+ * Follows one child process, stops at every system call, and prints the call
+ * name and its first three arguments. Built to explain what a program does
+ * between "run" and "exit"; not a debugging tool.
+ *
+ *   cc -O2 -o minitrace minitrace.c
+ *   ./minitrace ./hello
+ */
+#define _GNU_SOURCE
+#include &lt;errno.h&gt;
+#include &lt;signal.h&gt;
+#include &lt;stdio.h&gt;
+#include &lt;stdlib.h&gt;
+#include &lt;string.h&gt;
+#include &lt;sys/ptrace.h&gt;
+#include &lt;sys/types.h&gt;
+#include &lt;sys/user.h&gt;
+#include &lt;sys/wait.h&gt;
+#include &lt;sys/uio.h&gt;
+#include &lt;unistd.h&gt;
+
+static const char *name_of(long n)
+{
+    switch (n) {
+    case 0:   return "read";
+    case 1:   return "write";
+    case 2:   return "open";
+    case 3:   return "close";
+    case 5:   return "fstat";
+    case 8:   return "lseek";
+    case 9:   return "mmap";
+    case 10:  return "mprotect";
+    case 11:  return "munmap";
+    case 12:  return "brk";
+    case 16:  return "ioctl";
+    case 21:  return "access";
+    case 25:  return "mremap";
+    case 39:  return "getpid";
+    case 59:  return "execve";
+    case 60:  return "exit";
+    case 231: return "exit_group";
+    case 257: return "openat";
+    case 262: return "newfstatat";
+    case 273: return "set_robust_list";
+    case 302: return "prlimit64";
+    case 334: return "rseq";
+    case 158: return "arch_prctl";
+    case 218: return "set_tid_address";
+    case 318: return "getrandom";
+    case 13:  return "rt_sigaction";
+    case 14:  return "rt_sigprocmask";
+    case 24:  return "sched_yield";
+    case 56:  return "clone";
+    case 57:  return "fork";
+    case 58:  return "vfork";
+    case 61:  return "wait4";
+    case 62:  return "kill";
+    case 72:  return "fcntl";
+    case 102: return "getuid";
+    case 107: return "geteuid";
+    case 110: return "getppid";
+    case 186: return "gettid";
+    case 202: return "futex";
+    case 228: return "clock_gettime";
+    case 288: return "accept4";
+    case 41:  return "socket";
+    case 42:  return "connect";
+    case 44:  return "sendto";
+    case 45:  return "recvfrom";
+    case 20:  return "writev";
+    case 17:  return "pread64";
+    }
+    return "syscall";
+}
+
+/* Read a NUL-terminated string out of the traced process. */
+static int read_string(pid_t pid, unsigned long addr, char *out, size_t cap)
+{
+    struct iovec local  = { out, cap - 1 };
+    struct iovec remote = { (void *)addr, cap - 1 };
+    ssize_t n = process_vm_readv(pid, &amp;local, 1, &amp;remote, 1, 0);
+
+    if (n &lt;= 0) {
+        return 0;
+    }
+    out[n] = '\0';
+    return 1;
+}
+
+int main(int argc, char **argv)
+{
+    pid_t pid;
+    int status;
+    int entering = 1;
+
+    setvbuf(stdout, NULL, _IONBF, 0);   /* keep the trace in order */
+
+    if (argc &lt; 2) {
+        fprintf(stderr, "usage: minitrace program [args...]\n");
+        return 2;
+    }
+
+    pid = fork();
+    if (pid == 0) {
+        ptrace(PTRACE_TRACEME, 0, 0, 0);
+        raise(SIGSTOP);                 /* let the parent attach first */
+        execvp(argv[1], &amp;argv[1]);
+        _exit(127);
+    }
+
+    waitpid(pid, &amp;status, 0);
+    ptrace(PTRACE_SETOPTIONS, pid, 0,
+           (void *)(PTRACE_O_TRACESYSGOOD | PTRACE_O_EXITKILL));
+
+    for (;;) {
+        struct user_regs_struct r;
+
+        ptrace(PTRACE_SYSCALL, pid, 0, 0);
+        if (waitpid(pid, &amp;status, 0) &lt; 0) {
+            break;
+        }
+        if (WIFEXITED(status)) {
+            printf("exit(%d)\n", WEXITSTATUS(status));
+            break;
+        }
+        if (!WIFSTOPPED(status) || WSTOPSIG(status) != (SIGTRAP | 0x80)) {
+            continue;                   /* a signal or the exec stop */
+        }
+
+        ptrace(PTRACE_GETREGS, pid, 0, &amp;r);
+        if (entering) {
+            const char *name = name_of((long)r.orig_rax);
+
+            printf("%s%-9s(%#lx, %#lx, %#lx)\n",
+                   name[0] == '?' ? "?" : "", name,
+                   r.rdi, r.rsi, r.rdx);
+            if (strcmp(name, "syscall") == 0) {
+                printf("             #%lld\n", (long long)r.orig_rax);
+            }
+
+            /* Show the path for the calls where the first argument is one. */
+            if (r.orig_rax == 59 || r.orig_rax == 257 ||
+                r.orig_rax == 262 || r.orig_rax == 21) {
+                char text[256];
+                unsigned long at = (r.orig_rax == 257 || r.orig_rax == 262) ? r.rsi : r.rdi;
+                if (read_string(pid, at, text, sizeof text)) {
+                    printf("             \"%s\"\n", text);
+                }
+            }
+        }
+        entering = !entering;
+    }
+    return 0;
+}</code></pre>
+        </div>
+      </details>
+
+      <p>Build it and point it at anything. Two things make the output readable: the
+        tracer's own stdout is set unbuffered (otherwise its lines would appear after
+        the child's output), and path arguments are read out of the child's memory with
+        <code class="inline">process_vm_readv</code>, which is how
+        <code class="inline">"/etc/ld.so.cache"</code> appears on its own line.</p>
+
+      <p>If <code class="inline">strace</code> is installed on your machine, use it — it
+        knows every syscall and decodes the flags. Writing this one is how you find out
+        there is nothing else to it.</p>
+
+      <h3>The measuring commands</h3>
+
+      <table class="cheat">
+        <thead><tr><th>To see</th><th>Run</th></tr></thead>
+        <tbody>
+          <tr><td>what a program asks the kernel</td><td><code>./minitrace ./prog</code> (or <code>strace ./prog</code>)</td></tr>
+          <tr><td>its entry point and file type</td><td><code>readelf -h prog</code> · <code>file prog</code></td></tr>
+          <tr><td>its sections and where they live</td><td><code>readelf -SW prog</code></td></tr>
+          <tr><td>how big each part is</td><td><code>size prog</code></td></tr>
+          <tr><td>the machine code of one function</td><td><code>objdump -d prog | sed -n '/&lt;main&gt;:/,/^$/p'</code></td></tr>
+          <tr><td>which libraries it needs</td><td><code>ldd prog</code></td></tr>
+          <tr><td>symbol names left in the binary</td><td><code>nm prog</code></td></tr>
+          <tr><td>addresses of functions, data, heap, stack</td><td>print <code>&amp;f</code>, <code>&amp;global</code>, <code>malloc(1)</code>, <code>&amp;local</code></td></tr>
+          <tr><td>the type of every expression</td><td><code>./bin/brick typedump file.brick</code></td></tr>
+          <tr><td>the C Brick would write</td><td><code>./bin/brick emit file.brick</code></td></tr>
+          <tr><td>how long the CPU gave you</td><td><code>time prog</code> · <code>clock_gettime(CLOCK_MONOTONIC)</code></td></tr>
+        </tbody>
+      </table>
+
+      <div class="note tip">
+        <strong>Verify one number yourself.</strong> Every claim in this guide was produced
+        by one of those commands on an ordinary x86-64 Linux machine. Run the same
+        command on your machine and you will get different addresses (ASLR), a different
+        syscall list (glibc version), and different timings — and the same answers. That
+        gap between “different numbers, same behaviour” is exactly what systems
+        programming is about.
+      </div>
+
+      <div class="done-row"><button type="button" data-done="20" aria-pressed="false">Mark done</button></div>
+    </section>
+
+
+    <footer>
+      <p><strong>How this was made.</strong> Every trace, address, size and timing in
+        this guide came from a command run on an ordinary x86-64 Linux machine. Where a
+        number depends on the machine — addresses, syscall order, timings — you are told
+        so, and you are shown the command to reproduce it. Appendix A contains the full
+        source of the tracer used for the syscall listings.</p>
+      <p>Written for Brick 0.3.29. The beginner course, if you want it first, is
+        <a href="../learn/index.html">Learn Brick from zero</a>.</p>
+    </footer>
+  </main>
+</div>
+
+<script>
+  var KEY = "brick-systems-progress-v1";
+  var TOTAL = 20;
+  var done = {};
+  try {
+    var raw = localStorage.getItem(KEY);
+    if (raw) done = JSON.parse(raw) || {};
+  } catch (e) { done = {}; }
+
+  function storage(on) {
+    try {
+      if (on) localStorage.setItem(KEY, JSON.stringify(done));
+      else localStorage.removeItem(KEY);
+    } catch (e) { /* private mode: progress simply does not persist */ }
+  }
+
+  function refresh() {
+    var count = 0;
+    for (var k in done) if (done[k]) count++;
+    var pct = Math.round((count / TOTAL) * 100);
+    var fill = document.getElementById("progressFill");
+    var bar = document.getElementById("progressBar");
+    var label = document.getElementById("progressLabel");
+    if (fill) fill.style.width = pct + "%";
+    if (bar) bar.setAttribute("aria-valuenow", String(pct));
+    if (label) label.textContent = count + " / " + TOTAL;
+    document.querySelectorAll("[data-done]").forEach(function (btn) {
+      var n = btn.getAttribute("data-done");
+      var on = !!done[n];
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+      btn.textContent = on ? "✓ Done" : "Mark done";
+    });
+    document.querySelectorAll("nav.toc a[href^='#ch']").forEach(function (a) {
+      var n = a.getAttribute("href").replace("#ch", "");
+      a.classList.toggle("done", !!done[n]);
+    });
+  }
+
+  document.querySelectorAll("[data-done]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var n = btn.getAttribute("data-done");
+      done[n] = !done[n];
+      storage(true);
+      refresh();
+    });
+  });
+
+  refresh();
+
+  /* copy buttons */
+  document.querySelectorAll("[data-copy]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var box = btn.closest(".code");
+      var code = box ? box.querySelector("code") : null;
+      if (!code) return;
+      var text = code.innerText;
+      function ok() { btn.textContent = "Copied"; setTimeout(function () { btn.textContent = "Copy"; }, 1200); }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(ok, function () {});
+      } else {
+        var ta = document.createElement("textarea");
+        ta.value = text; document.body.appendChild(ta); ta.select();
+        try { document.execCommand("copy"); ok(); } catch (e) {}
+        document.body.removeChild(ta);
+      }
+    });
+  });
+
+  /* mobile menu */
+  var menuBtn = document.getElementById("menuBtn");
+  var toc = document.getElementById("toc");
+  if (menuBtn && toc) {
+    menuBtn.addEventListener("click", function () {
+      var open = toc.classList.toggle("open");
+      menuBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    toc.addEventListener("click", function (e) {
+      if (e.target.closest("a")) {
+        toc.classList.remove("open");
+        menuBtn.setAttribute("aria-expanded", "false");
+      }
+    });
+  }
+
+  /* active section on scroll */
+  var links = {};
+  document.querySelectorAll("nav.toc a[href^='#']").forEach(function (a) {
+    links[a.getAttribute("href").slice(1)] = a;
+  });
+  var targets = document.querySelectorAll("section[id]");
+  if ("IntersectionObserver" in window) {
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        var link = links[entry.target.id];
+        if (!link) return;
+        if (entry.isIntersecting) {
+          Object.keys(links).forEach(function (k) { links[k].classList.remove("active"); });
+          link.classList.add("active");
+        }
+      });
+    }, { rootMargin: "-80px 0px -70% 0px" });
+    targets.forEach(function (t) { obs.observe(t); });
+  }
+</script>
+</body>
+</html>
