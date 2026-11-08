@@ -1,0 +1,1994 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Learn Brick — from zero, no coding experience needed</title>
+<meta name="description" content="A gentle, hands-on introduction to the Brick programming language for absolute beginners. No prior coding experience required.">
+<style>
+  :root {
+    --bg: #14110f;
+    --panel: #1c1815;
+    --panel-2: #221d19;
+    --line: #332b26;
+    --ink: #efe7e1;
+    --muted: #a79a91;
+    --accent: #e2683c;
+    --accent-soft: #f0a17e;
+    --gold: #f2c14e;
+    --green: #7bc47f;
+    --red: #e56b6f;
+    --code-bg: #100e0c;
+    --code-ink: #e8e0d9;
+    --radius: 14px;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --maxw: 1180px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; scroll-padding-top: 76px; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a { color: var(--accent-soft); }
+  a:hover { color: var(--gold); }
+
+  .skip {
+    position: absolute; left: -9999px; top: 0;
+    background: var(--accent); color: #1a1210; padding: .6rem 1rem;
+    z-index: 100; border-radius: 0 0 8px 0; font-weight: 700;
+  }
+  .skip:focus { left: 0; }
+
+  /* ---------- top bar ---------- */
+  .topbar {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(20,17,15,.88);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar-inner {
+    max-width: var(--maxw); margin: 0 auto; padding: .7rem 1.2rem;
+    display: flex; align-items: center; gap: 1rem;
+  }
+  .brand { display: flex; align-items: center; gap: .55rem; font-weight: 800; letter-spacing: .2px; }
+  .brand .mark {
+    width: 26px; height: 26px; border-radius: 6px; font-weight: 800;
+    background: linear-gradient(135deg, var(--accent), #b5431f);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.12);
+    display: grid; place-items: center; font-size: 13px; color: #201512;
+  }
+  .brand small { font-weight: 500; color: var(--muted); }
+  .progress-wrap { flex: 1; display: flex; align-items: center; gap: .7rem; min-width: 0; }
+  .progress-track {
+    flex: 1; height: 7px; background: #2a231f; border-radius: 99px; overflow: hidden; min-width: 60px;
+  }
+  .progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--gold)); transition: width .35s ease; }
+  .progress-label { font-size: .78rem; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .menu-btn {
+    display: none; background: #261f1b; color: var(--ink); border: 1px solid var(--line);
+    border-radius: 8px; padding: .4rem .7rem; font: inherit; font-size: .85rem; cursor: pointer;
+  }
+
+  /* ---------- layout ---------- */
+  .shell {
+    max-width: var(--maxw); margin: 0 auto; padding: 0 1.2rem 6rem;
+    display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 2.4rem;
+  }
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: 1fr; gap: 0; }
+    .menu-btn { display: inline-block; }
+  }
+
+  nav.toc {
+    position: sticky; top: 62px; align-self: start;
+    max-height: calc(100vh - 80px); overflow-y: auto;
+    padding: 1.4rem 0 2rem; font-size: .9rem;
+  }
+  nav.toc h2 {
+    font-size: .72rem; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--muted); margin: 0 0 .7rem; font-weight: 700;
+  }
+  nav.toc ol { list-style: none; margin: 0; padding: 0; counter-reset: step; }
+  nav.toc li { counter-increment: step; }
+  nav.toc a {
+    display: flex; gap: .55rem; align-items: baseline;
+    color: var(--muted); text-decoration: none; padding: .32rem .55rem;
+    border-radius: 8px; border-left: 2px solid transparent;
+  }
+  nav.toc a::before {
+    content: counter(step); font-family: var(--mono); font-size: .72rem;
+    color: #6b5f57; min-width: 1.3em; text-align: right;
+  }
+  nav.toc a:hover { background: #1e1a17; color: var(--ink); }
+  nav.toc a.active { color: var(--ink); background: #221c18; border-left-color: var(--accent); }
+  nav.toc a.done::before { content: "✓"; color: var(--green); }
+  nav.toc ol.plain { counter-reset: none; }
+  nav.toc ol.plain li { counter-increment: none; }
+  nav.toc ol.plain a::before { content: "·"; }
+  @media (max-width: 900px) {
+    nav.toc {
+      position: static; max-height: none; display: none;
+      border-bottom: 1px solid var(--line); padding-top: .5rem;
+    }
+    nav.toc.open { display: block; }
+  }
+
+  main { padding-top: 1.6rem; min-width: 0; }
+
+  /* ---------- hero ---------- */
+  .hero { padding: 2.6rem 0 1.4rem; }
+  .eyebrow {
+    display: inline-block; font-size: .75rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--gold); border: 1px solid #4a3a22; background: #241d14;
+    padding: .25rem .6rem; border-radius: 99px; font-weight: 700; margin-bottom: 1rem;
+  }
+  .hero h1 {
+    font-size: clamp(2.1rem, 5vw, 3.3rem); line-height: 1.08; margin: 0 0 1rem;
+    letter-spacing: -.02em;
+  }
+  .hero h1 .accent { color: var(--accent); }
+  .hero p.lede { font-size: 1.15rem; color: #d7cbc4; max-width: 44ch; margin: 0 0 1.4rem; }
+  .hero-actions { display: flex; flex-wrap: wrap; gap: .7rem; }
+  .btn {
+    display: inline-flex; align-items: center; gap: .45rem;
+    font: inherit; font-weight: 650; font-size: .95rem;
+    padding: .65rem 1.1rem; border-radius: 10px; cursor: pointer;
+    text-decoration: none; border: 1px solid transparent;
+  }
+  .btn-primary { background: var(--accent); color: #1a1009; }
+  .btn-primary:hover { background: #ef7a4c; color: #1a1009; }
+  .btn-ghost { background: #211b18; color: var(--ink); border-color: var(--line); }
+  .btn-ghost:hover { background: #2a221d; color: var(--ink); }
+
+  .brickstrip {
+    height: 10px; margin: 2rem 0 0; border-radius: 99px; overflow: hidden;
+    background:
+      repeating-linear-gradient(90deg,
+        var(--accent) 0 46px, transparent 46px 50px),
+      repeating-linear-gradient(90deg,
+        #8e3a1e 0 26px, transparent 26px 30px);
+    opacity: .55;
+  }
+
+  /* ---------- lessons ---------- */
+  section.lesson {
+    padding: 2.4rem 0 1.2rem;
+    border-top: 1px solid var(--line);
+    margin-top: 2rem;
+  }
+  section.lesson:first-of-type { border-top: none; margin-top: .5rem; }
+  .lesson-head { display: flex; align-items: flex-start; gap: .9rem; margin-bottom: .4rem; }
+  .lesson-num {
+    flex: none; width: 34px; height: 34px; border-radius: 9px;
+    display: grid; place-items: center; font-family: var(--mono); font-size: .85rem;
+    background: #2a211c; color: var(--gold); border: 1px solid #3d3028; margin-top: .25rem;
+  }
+  .lesson h2 { font-size: 1.6rem; margin: 0; letter-spacing: -.01em; line-height: 1.25; }
+  .lesson .goal { color: var(--muted); margin: .2rem 0 0; font-size: .95rem; }
+  .lesson p { max-width: 68ch; }
+  h3 { font-size: 1.08rem; margin: 1.8rem 0 .5rem; }
+  ul, ol { max-width: 68ch; }
+  li { margin: .3rem 0; }
+  code.inline {
+    font-family: var(--mono); font-size: .88em; background: #241e1a;
+    padding: .1em .4em; border-radius: 5px; border: 1px solid #332a24; color: #f4ddd0;
+  }
+
+  /* ---------- code blocks ---------- */
+  .code {
+    margin: 1rem 0; border: 1px solid var(--line); border-radius: var(--radius);
+    overflow: hidden; background: var(--code-bg);
+  }
+  .code-bar {
+    display: flex; align-items: center; gap: .6rem;
+    padding: .45rem .7rem; background: #191513; border-bottom: 1px solid #2a2320;
+    font-size: .78rem; color: var(--muted); font-family: var(--mono);
+  }
+  .dots { display: flex; gap: 5px; }
+  .dots i { width: 9px; height: 9px; border-radius: 50%; background: #3a302b; display: block; }
+  .dots i:nth-child(1) { background: #5a3a33; }
+  .dots i:nth-child(2) { background: #5a4f33; }
+  .dots i:nth-child(3) { background: #38513a; }
+  .code-bar .name { flex: 1; }
+  .code-bar button {
+    font: inherit; font-size: .75rem; font-family: var(--mono);
+    background: #251f1b; color: var(--muted); border: 1px solid #362c26;
+    border-radius: 7px; padding: .2rem .55rem; cursor: pointer;
+  }
+  .code-bar button:hover { color: var(--ink); background: #2e2621; }
+  pre {
+    margin: 0; padding: 1rem 1.1rem; overflow-x: auto;
+    font-family: var(--mono); font-size: .9rem; line-height: 1.6;
+    color: var(--code-ink); tab-size: 4;
+  }
+  pre code { font-family: inherit; }
+  .tok-kw { color: #e88b6a; font-weight: 600; }
+  .tok-type { color: #86c6e8; }
+  .tok-str { color: #b3d98a; }
+  .tok-num { color: #f2c14e; }
+  .tok-com { color: #7d706a; font-style: italic; }
+  .tok-fn { color: #e9cfa8; }
+  .tok-builtin { color: #c9a0f0; }
+
+  .output {
+    border-top: 1px dashed #332a24; background: #0c0a09;
+    padding: .85rem 1.1rem; font-family: var(--mono); font-size: .86rem;
+    color: #b9d8b3; white-space: pre-wrap; display: none;
+  }
+  .output.show { display: block; }
+  .output .label {
+    display: block; font-size: .68rem; letter-spacing: .12em; text-transform: uppercase;
+    color: #6f645d; margin-bottom: .4rem; font-family: var(--sans);
+  }
+
+  /* ---------- callouts ---------- */
+  .note {
+    border-left: 3px solid var(--gold); background: #201a12;
+    padding: .85rem 1rem; border-radius: 0 10px 10px 0; margin: 1.2rem 0;
+    font-size: .95rem; color: #e5d9c9;
+  }
+  .note strong { color: var(--gold); }
+  .warn { border-left-color: var(--red); background: #221415; color: #f0d5d5; }
+  .warn strong { color: var(--red); }
+  .tip { border-left-color: var(--green); background: #14201a; color: #d4ecdb; }
+  .tip strong { color: var(--green); }
+
+  /* ---------- run / try ---------- */
+  .try {
+    border: 1px solid #3a2f28; background: var(--panel);
+    border-radius: var(--radius); padding: 1rem 1.1rem; margin: 1.3rem 0;
+  }
+  .try h4 {
+    margin: 0 0 .5rem; font-size: .78rem; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--accent-soft);
+  }
+  .try p:last-child { margin-bottom: 0; }
+  .reveal {
+    margin-top: .7rem; background: none; border: 1px solid #4a3b31;
+    color: var(--muted); font: inherit; font-size: .86rem; padding: .35rem .75rem;
+    border-radius: 8px; cursor: pointer;
+  }
+  .reveal:hover { color: var(--ink); border-color: #6a5245; }
+  .hidden-answer { display: none; margin-top: .8rem; }
+  .hidden-answer.show { display: block; }
+
+  /* ---------- quiz ---------- */
+  .quiz {
+    border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 1rem 1.1rem; background: var(--panel-2); margin: 1.3rem 0;
+  }
+  .quiz .q { font-weight: 650; margin: 0 0 .7rem; }
+  .quiz .opts { display: grid; gap: .45rem; }
+  .quiz button.opt {
+    text-align: left; font: inherit; font-size: .93rem; color: var(--ink);
+    background: #1a1614; border: 1px solid #362c26; border-radius: 9px;
+    padding: .5rem .8rem; cursor: pointer;
+  }
+  .quiz button.opt:hover:not(:disabled) { border-color: #5d4a3e; background: #221c18; }
+  .quiz button.opt.correct { border-color: var(--green); background: #16261c; color: #d8f0dd; }
+  .quiz button.opt.wrong { border-color: var(--red); background: #26161a; color: #f3d3d6; }
+  .quiz button.opt:disabled { cursor: default; }
+  .quiz .fb { margin: .7rem 0 0; font-size: .9rem; color: var(--muted); min-height: 1.2em; }
+  .quiz .fb.ok { color: var(--green); }
+  .quiz .fb.no { color: var(--red); }
+
+  /* ---------- predict ---------- */
+  .predict { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; margin-top: .7rem; }
+  .predict input {
+    font-family: var(--mono); font-size: .9rem; background: #151211; color: var(--ink);
+    border: 1px solid #3a2f28; border-radius: 8px; padding: .4rem .6rem; min-width: 12ch; flex: 1;
+  }
+  .predict input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .predict button {
+    font: inherit; font-size: .86rem; background: #2a211c; color: var(--ink);
+    border: 1px solid #3f332b; border-radius: 8px; padding: .4rem .8rem; cursor: pointer;
+  }
+  .predict .verdict { font-size: .86rem; }
+
+  /* ---------- misc ---------- */
+  .done-row {
+    display: flex; align-items: center; gap: .6rem; margin-top: 1.8rem;
+    padding-top: 1rem; border-top: 1px dashed #2c2521;
+  }
+  .done-row button {
+    font: inherit; font-size: .85rem; background: #211b17; color: var(--muted);
+    border: 1px solid #3a2f28; border-radius: 8px; padding: .35rem .8rem; cursor: pointer;
+  }
+  .done-row button:hover { color: var(--ink); }
+  .done-row button[aria-pressed="true"] { color: var(--green); border-color: #3a5c42; background: #152019; }
+
+  .pipeline { display: flex; flex-wrap: wrap; align-items: stretch; gap: .5rem; margin: 1.2rem 0; }
+  .pipe-step {
+    flex: 1 1 130px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: .7rem .8rem; font-size: .85rem;
+  }
+  .pipe-step b { display: block; font-family: var(--mono); color: var(--gold); font-size: .82rem; }
+  .pipe-arrow { display: grid; place-items: center; color: #6b5f57; font-size: 1.1rem; }
+
+  table.cheat { width: 100%; border-collapse: collapse; font-size: .9rem; margin: 1rem 0; }
+  table.cheat th, table.cheat td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid #2b2420; vertical-align: top; }
+  table.cheat th { color: var(--muted); font-weight: 600; font-size: .78rem; letter-spacing: .08em; text-transform: uppercase; }
+  table.cheat td code { font-family: var(--mono); color: #f0d9c9; font-size: .87em; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .8rem; margin: 1.2rem 0; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: .9rem 1rem; font-size: .92rem;
+  }
+  .card h4 { margin: 0 0 .35rem; font-size: .95rem; }
+  .card p { margin: 0; color: var(--muted); font-size: .88rem; }
+
+  footer {
+    border-top: 1px solid var(--line); margin-top: 3rem; padding: 2rem 0 4rem;
+    color: var(--muted); font-size: .88rem;
+  }
+  .kbd {
+    font-family: var(--mono); font-size: .78rem; background: #241e1a;
+    border: 1px solid #3a2f28; border-bottom-width: 2px; border-radius: 6px;
+    padding: .05rem .4rem; color: var(--ink);
+  }
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+  @media print {
+    .topbar, nav.toc, .code-bar button, .reveal, .quiz, .done-row, .hero-actions { display: none !important; }
+    body { background: #fff; color: #000; }
+    .output { display: block !important; }
+    .shell { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#lesson-1">Skip to the first lesson</a>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <span class="mark">B</span>
+      <span>Learn Brick <small>· from zero</small></span>
+    </div>
+    <div class="progress-wrap">
+      <div class="progress-track" role="progressbar" aria-label="Course progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progressBar">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+      <span class="progress-label" id="progressLabel">0 / 12</span>
+    </div>
+    <button class="menu-btn" id="menuBtn" aria-expanded="false" aria-controls="toc">Lessons</button>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" id="toc" aria-label="Lessons">
+    <h2>Lessons</h2>
+    <ol>
+      <li><a href="#lesson-1">Your first program</a></li>
+      <li><a href="#lesson-2">Numbers and math</a></li>
+      <li><a href="#lesson-3">Variables</a></li>
+      <li><a href="#lesson-4">Making decisions</a></li>
+      <li><a href="#lesson-5">Repeating things</a></li>
+      <li><a href="#lesson-6">Lists</a></li>
+      <li><a href="#lesson-7">Functions</a></li>
+      <li><a href="#lesson-8">Building text</a></li>
+      <li><a href="#lesson-9">Your own types</a></li>
+      <li><a href="#lesson-10">Choices that can't be forgotten</a></li>
+      <li><a href="#lesson-11">Putting it together</a></li>
+      <li><a href="#lesson-12">Where to go next</a></li>
+    </ol>
+    <h2 style="margin-top:1.6rem">Handy</h2>
+    <ol class="plain">
+      <li><a href="#cheatsheet">Cheat sheet</a></li>
+      <li><a href="#mistakes">Common mistakes</a></li>
+      <li><a href="#install">Install Brick</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <div class="hero">
+      <span class="eyebrow">No coding experience needed</span>
+      <h1>A language you can <span class="accent">read</span>.<br>A machine you can <span class="accent">understand</span>.</h1>
+      <p class="lede">
+        Brick is a small programming language. This page teaches it from absolutely
+        nothing: no previous code, no maths beyond school, no jargon without an
+        explanation. Twelve short lessons, each one a program you can run.
+      </p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="#lesson-1">Start lesson 1 →</a>
+        <a class="btn btn-ghost" href="#install">I want to install it first</a>
+      </div>
+      <div class="brickstrip" aria-hidden="true"></div>
+    </div>
+
+    <!-- ============ BEFORE WE START ============ -->
+    <section class="lesson" id="before">
+      <div class="lesson-head">
+        <div class="lesson-num">☰</div>
+        <div>
+          <h2>Before we start: what is a program?</h2>
+          <p class="goal">Three minutes of context that make everything else easier.</p>
+        </div>
+      </div>
+
+      <p>
+        A <strong>program</strong> is a list of instructions, in order, that a computer
+        follows exactly. It is like a recipe: not vague advice ("cook until nice"),
+        but precise steps ("heat to 180 °C, wait 12 minutes").
+      </p>
+      <p>
+        A <strong>programming language</strong> is the notation you write those steps in.
+        Humans write the recipe; the computer needs something much more boring and
+        repetitive. So a program called a <strong>compiler</strong> translates what you wrote
+        into the computer's own language.
+      </p>
+
+      <p>Brick is unusual in how it does that last step: it turns your program into
+        <strong>C</strong>, another language that has excellent free translators
+        (<code class="inline">gcc</code>, <code class="inline">clang</code>). Those then produce the
+        actual machine code. So Brick leans on decades of optimisation work instead of
+        re-inventing it.</p>
+
+      <div class="pipeline" role="img" aria-label="hello.brick goes to the Brick compiler, which writes hello.c, which gcc turns into a runnable program">
+        <div class="pipe-step"><b>hello.brick</b>what you write</div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step"><b>brick</b>the Brick compiler</div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step"><b>hello.c</b>plain C, readable</div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step"><b>gcc</b>the optimiser</div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step"><b>hello</b>a real program</div>
+      </div>
+
+      <div class="note">
+        <strong>You do not need to understand the diagram.</strong> It is here so that
+        later, when something feels like magic, you can come back and see there is no
+        magic — just text turning into other text until it runs.
+      </div>
+
+      <p>
+        One more thing: this page does not run code inside your browser. Each program
+        below has a <em>Run</em> button, and the output it shows is the real output of
+        the real Brick compiler, copied here so you can compare.
+      </p>
+    </section>
+
+    <!-- ============ 1 ============ -->
+    <section class="lesson" id="lesson-1" data-lesson="1">
+      <div class="lesson-head">
+        <div class="lesson-num">1</div>
+        <div>
+          <h2>Your first program</h2>
+          <p class="goal">Make the computer say something.</p>
+        </div>
+      </div>
+
+      <p>Here is the smallest useful Brick program in existence:</p>
+
+      <div class="code" data-demo>
+        <div class="code-bar">
+          <span class="dots"><i></i><i></i><i></i></span>
+          <span class="name">hello.brick</span>
+          <button type="button" data-copy>Copy</button>
+          <button type="button" data-run>▶ Run</button>
+        </div>
+        <pre><code>function main() {
+    print("Hello, Brick!")
+}</code></pre>
+        <div class="output"><span class="label">Output</span>Hello, Brick!</div>
+      </div>
+
+      <p>Read it out loud, roughly: <em>“make a function called main; inside it, print the words Hello, Brick!”</em></p>
+
+      <p>Four pieces matter:</p>
+      <ul>
+        <li><code class="inline">function main()</code> — every Brick program has a <code class="inline">main</code>.
+          It is where the computer starts. You never call it yourself; the program does.</li>
+        <li><code class="inline">{</code> and <code class="inline">}</code> — the curly braces mark the <em>body</em>.
+          Everything between them belongs to the thing before them. They always come in pairs.</li>
+        <li><code class="inline">print(...)</code> — show something on the screen, then move to a new line.</li>
+        <li><code class="inline">"Hello, Brick!"</code> — the quotes are part of the notation, not the message.
+          They say “this is literal text, not an instruction”.</li>
+      </ul>
+
+      <div class="note warn">
+        <strong>Every character counts.</strong> Brick cares about the difference between
+        <code class="inline">"</code> and <code class="inline">'</code>, between uppercase and
+        lowercase, and about braces matching. If something breaks, look for a missing
+        <code class="inline">}</code> or a missing quote first — it is almost always that.
+      </div>
+
+      <div class="try">
+        <h4>Try it</h4>
+        <p>Change the words inside the quotes to your own name. Keep the quotes and the
+          parentheses where they are. What do you think happens if you delete one quote?</p>
+        <button class="reveal" type="button" data-reveal>Show the answer</button>
+        <div class="hidden-answer">
+          <p>The compiler stops and points at the line. Text without a closing quote
+            runs to the end of the line and the program makes no sense, so Brick refuses
+            to build it. This is normal and good: a compiler's job is to complain early.</p>
+        </div>
+      </div>
+
+      <div class="quiz" data-quiz>
+        <p class="q">Which line does the computer start with?</p>
+        <div class="opts">
+          <button class="opt" type="button" data-correct="true">function main()</button>
+          <button class="opt" type="button" data-correct="false">print("Hello, Brick!")</button>
+          <button class="opt" type="button" data-correct="false">the last line</button>
+        </div>
+        <p class="fb" aria-live="polite"></p>
+      </div>
+
+      <div class="done-row">
+        <button type="button" data-done="1" aria-pressed="false">Mark lesson 1 done</button>
+        <span style="color:var(--muted);font-size:.85rem">Saved in this browser only.</span>
+      </div>
+    </section>
+
+    <!-- ============ 2 ============ -->
+    <section class="lesson" id="lesson-2" data-lesson="2">
+      <div class="lesson-head">
+        <div class="lesson-num">2</div>
+        <div>
+          <h2>Numbers and math</h2>
+          <p class="goal">Let the computer do the arithmetic.</p>
+        </div>
+      </div>
+
+      <p>
+        <code class="inline">print</code> does not only print text. Give it a calculation and it
+        works out the answer first:
+      </p>
+
+      <div class="code" data-demo>
+        <div class="code-bar">
+          <span class="dots"><i></i><i></i><i></i></span>
+          <span class="name">math.brick</span>
+          <button type="button" data-copy>Copy</button>
+          <button type="button" data-run>▶ Run</button>
+        </div>
+        <pre><code>function main() {
+    print(2 + 3)
+    print(10 - 4)
+    print(6 * 7)
+    print(20 / 4)
+}</code></pre>
+        <div class="output"><span class="label">Output</span>5
+6
+42
+5</div>
+      </div>
+
+      <p>The symbols are the ones you already know, with two exceptions:</p>
+      <ul>
+        <li><code class="inline">*</code> means multiply (because <code class="inline">×</code> is not on a keyboard).</li>
+        <li><code class="inline">/</code> means divide. With whole numbers the answer is
+          <em>rounded down</em>: <code class="inline">7 / 2</code> gives <code class="inline">3</code>, not 3.5.</li>
+        <li><code class="inline">%</code> means “remainder”. <code class="inline">7 % 2</code> gives <code class="inline">1</code>.
+          You will meet it again in lesson 11, and it is far more useful than it looks.</li>
+      </ul>
+
+      <p>Notice there are no quotes around the calculations. Quotes mean “text, exactly as written”.
+        Without them, Brick computes.</p>
+
+      <div class="try">
+        <h4>Try it</h4>
+        <p>Add a line that prints <code class="inline">100 - 58</code>. Then try
+          <code class="inline">print(7 / 2)</code> and <code class="inline">print(7 % 2)</code>.</p>
+        <button class="reveal" type="button" data-reveal>Show the answer</button>
+        <div class="hidden-answer">
+          <p>You get <code class="inline">42</code>, then <code class="inline">3</code>, then <code class="inline">1</code>.
+            Whole-number division throws away the fraction; <code class="inline">%</code> keeps only the fraction — as a remainder.</p>
+        </div>
+      </div>
+
+      <div class="quiz" data-quiz>
+        <p class="q">What does <code class="inline">print(9 % 4)</code> show?</p>
+        <div class="opts">
+          <button class="opt" type="button" data-correct="false">2</button>
+          <button class="opt" type="button" data-correct="true">1</button>
+          <button class="opt" type="button" data-correct="false">2.25</button>
+        </div>
+        <p class="fb" aria-live="polite"></p>
+      </div>
+
+      <div class="done-row">
+        <button type="button" data-done="2" aria-pressed="false">Mark lesson 2 done</button>
+      </div>
+    </section>
+
+    <!-- ============ 3 ============ -->
+    <section class="lesson" id="lesson-3" data-lesson="3">
+      <div class="lesson-head">
+        <div class="lesson-num">3</div>
+        <div>
+          <h2>Variables: giving a name to a value</h2>
+          <p class="goal">Stop repeating yourself; store things.</p>
+        </div>
+      </div>
+
+      <p>
+        A <strong>variable</strong> is a labelled box that holds a value. You make one with
+        <code class="inline">var</code>, and Brick works out what kind of value it is:
+      </p>
+
+      <div class="code" data-demo>
+        <div class="code-bar">
+          <span class="dots"><i></i><i></i><i></i></span>
+          <span class="name">variables.brick</span>
+          <button type="button" data-copy>Copy</button>
+          <button type="button" data-run>▶ Run</button>
+        </div>
+        <pre><code>function main() {
+    var name = "Brick"
+    var year = 2026
+
+    print("I am learning " + name)
+    print(year)
+}</code></pre>
+        <div class="output"><span class="label">Output</span>I am learning Brick
+2026</div>
+      </div>
+
+      <p>Three things to notice:</p>
+      <ul>
+        <li>The <code class="inline">+</code> sign glues text together when both sides are text.
+          That is called <em>concatenation</em>, and it is why the space inside
+          <code class="inline">"I am learning "</code> matters.</li>
+        <li><code class="inline">year</code> prints as <code class="inline">2026</code>, not <code class="inline">"2026"</code>.
+          Brick is strict about the difference between a number and text — a number can be
+          used in math, text cannot.</li>
+        <li>You cannot add a number to text directly. <code class="inline">"Year: " + 2026</code>
+          is an error, on purpose. Lesson 8 shows the fix, <code class="inline">to_text</code>.</li>
+      </ul>
+
+      <div class="note">
+        <strong>Names are yours to choose.</strong> <code class="inline">age</code>,
+        <code class="inline">score</code>, <code class="inline">temperature</code> — anything
+        that is a letter followed by letters, digits or underscores. Pick names you would
+        say out loud. Future-you will be grateful.
+      </div>
+
+      <p>Changing a value later is easy — just assign to it again:</p>
+
+      <div class="code" data-demo>
+        <div class="code-bar">
+          <span class="dots"><i></i><i></i><i></i></span>
+          <span class="name">changing.brick</span>
+          <button type="button" data-copy>Copy</button>
+          <button type="button" data-run>▶ Run</button>
+        </div>
+        <pre><code>function main() {
+    var score = 10
+    print(score)
+    score = 25
+    print(score)
+}</code></pre>
+        <div class="output"><span class="label">Output</span>10
+25</div>
+      </div>
+
+      <div class="quiz" data-quiz>
+        <p class="q">What is wrong with this line?</p>
+        <div class="code" style="margin-top:.4rem">
+          <pre><code>print("Age: " + 12)</code></pre>
+        </div>
+        <div class="opts">
+          <button class="opt" type="button" data-correct="false">Nothing, it prints "Age: 12"</button>
+          <button class="opt" type="button" data-correct="true">You cannot glue text and a number with <code>+</code> in Brick</button>
+          <button class="opt" type="button" data-correct="false">12 is too small a number</button>
+        </div>
+        <p class="fb" aria-live="polite"></p>
+      </div>
+
+      <div class="done-row">
+        <button type="button" data-done="3" aria-pressed="false">Mark lesson 3 done</button>
+      </div>
+    </section>
+
+    <!-- ============ 4 ============ -->
+    <section class="lesson" id="lesson-4" data-lesson="4">
+      <div class="lesson-head">
+        <div class="lesson-num">4</div>
+        <div>
+          <h2>Making decisions</h2>
+          <p class="goal">Run different instructions depending on a condition.</p>
+        </div>
+      </div>
+
+      <p>
+        <code class="inline">if</code> is a fork in the road. Brick checks a condition —
+        something that is either true or false — and takes one path:
+      </p>
+
+      <div class="code" data-demo>
+        <div class="code-bar">
+          <span class="dots"><i></i><i></i><i></i></span>
+          <span class="name">weather.brick</span>
+          <button type="button" data-copy>Copy</button>
+          <button type="button" data-run>▶ Run</button>
+        </div>
+        <pre><code>function main() {
+    var temperature = 18
+
+    if temperature &gt; 25 {
+        print("Warm")
+    } else if temperature &gt; 15 {
+        print("Mild")
+    } else {
+        print("Cold")
+    }
+}</code></pre>
+        <div class="output"><span class="label">Output</span>Mild</div>
+      </div>
+
+      <p>The shapes to remember:</p>
+      <ul>
+        <li><code class="inline">&gt;</code> greater than, <code class="inline">&lt;</code> less than,
+          <code class="inline">&gt;=</code> greater or equal, <code class="inline">&lt;=</code> less or equal.</li>
+        <li><code class="inline">==</code> means “is equal to”. Yes, <em>two</em> equals signs.
+          One <code class="inline">=</code> means “put this value in that box” (lesson 3). Mixing
+          them up is the single most common beginner mistake.</li>
+        <li><code class="inline">!=</code> means “is not equal to”.</li>
+        <li><code class="inline">else if</code> adds another question when the first one was false.</li>
+        <li><code class="inline">else</code> is the “none of the above” path. It has no condition.</li>
+      </ul>
+
+      <p>Brick checks from the top. <code class="inline">18 &gt; 25</code> is false, so it asks the
+        next question: <code class="inline">18 &gt; 15</code> is true, so it prints
+        <em>Mild</em> and skips the rest.</p>
+
+      <div class="note tip">
+        <strong>Indentation is for humans.</strong> The spaces at the start of lines do not
+        change what the program does — but they show at a glance which instructions are
+        inside which block. Brick's formatter (<code class="inline">brick fmt</code>) applies
+        the standard four spaces for you.
+      </div>
+
+      <div class="try">
+        <h4>Try it</h4>
+        <p>Write a program with <code class="inline">var score = 72</code> that prints
+          <code class="inline">"Pass"</code> when the score is 50 or more, and
+          <code class="inline">"Fail"</code> otherwise.</p>
+        <button class="reveal" type="button" data-reveal>Show the answer</button>
+        <div class="hidden-answer">
+          <div class="code">
+            <pre><code>function main() {
+    var score = 72
+    if score &gt;= 50 {
+        print("Pass")
+    } else {
+        print("Fail")
+    }
+}</code></pre>
+          </div>
+          <p>Change <code class="inline">72</code> to <code class="inline">30</code> and run it again
+            — the other path is taken.</p>
+        </div>
+      </div>
+
+      <div class="quiz" data-quiz>
+        <p class="q">Which condition means “age is at least 18”?</p>
+        <div class="opts">
+          <button class="opt" type="button" data-correct="false"><code>age &gt; 18</code></button>
+          <button class="opt" type="button" data-correct="true"><code>age &gt;= 18</code></button>
+          <button class="opt" type="button" data-correct="false"><code>age = 18</code></button>
+        </div>
+        <p class="fb" aria-live="polite"></p>
+      </div>
+
+      <div class="done-row">
+        <button type="button" data-done="4" aria-pressed="false">Mark lesson 4 done</button>
+      </div>
+    </section>
+
+    <!-- ============ 5 ============ -->
+    <section class="lesson" id="lesson-5" data-lesson="5">
+      <div class="lesson-head">
+        <div class="lesson-num">5</div>
+        <div>
+          <h2>Repeating things</h2>
+          <p class="goal">Make the computer do the boring part.</p>
+        </div>
+      </div>
+
+      <p>
+        <code class="inline">while</code> repeats a block <em>as long as</em> a condition stays true.
+        Somewhere inside you must change something, or it repeats forever:
+      </p>
+
+      <div class="code" data-demo>
+        <div class="code-bar">
+          <span class="dots"><i></i><i></i><i></i></span>
+          <span class="name">countdown.brick</span>
+          <button type="button" data-copy>Copy</button>
+          <button type="button" data-run>▶ Run</button>
+        </div>
+        <pre><code>function main() {
+    var n = 3
+
+    while n &gt; 0 {
+        print(n)
+        n = n - 1
+    }
+
+    print("Liftoff!")
+}</code></pre>
+        <div class="output"><span class="label">Output</span>3
+2
+1
+Liftoff!</div>
+      </div>
+
+      <p>Follow it step by step:</p>
+      <ol>
+        <li><code class="inline">n</code> is 3. Is <code class="inline">3 &gt; 0</code>? Yes → print 3, make <code class="inline">n</code> 2.</li>
+        <li>Is <code class="inline">2 &gt; 0</code>? Yes → print 2, make <code class="inline">n</code> 1.</li>
+        <li>Is <code class="inline">1 &gt; 0</code>? Yes → print 1, make <code class="inline">n</code> 0.</li>
+        <li>Is <code class="inline">0 &gt; 0</code>? No → leave the loop, print “Liftoff!”.</li>
+      </ol>
+
+      <div class="note warn">
+        <strong>The classic bug.</strong> If you forget <code class="inline">n = n - 1</code>, the
+        condition stays true forever and the program never stops. That is called an
+        <em>infinite loop</em>. Closing the terminal, or <span class="kbd">Ctrl</span>+<span class="kbd">C</span>,
+        ends it.
+      </div>
+
+      <div class="try">
+        <h4>Try it</h4>
+        <p>Print the even numbers from 2 to 10. Hint: start at 2 and add 2 each time.</p>
+        <button class="reveal" type="button" data-reveal>Show the answer</button>
+        <div class="hidden-answer">
+          <div class="code">
+            <pre><code>function main() {
+    var n = 2
+    while n &lt;= 10 {
+        print(n)
+        n = n + 2
+    }
+}</code></pre>
+          </div>
+          <p>Output: <code class="inline">2 4 6 8 10</code>, one per line.</p>
+        </div>
+      </div>
+
+      <div class="quiz" data-quiz>
+        <p class="q">What happens if the loop body never changes the condition?</p>
+        <div class="opts">
+          <button class="opt" type="button" data-correct="false">Brick runs it once and stops</button>
+          <button class="opt" type="button" data-correct="true">It repeats forever (an infinite loop)</button>
+          <button class="opt" type="button" data-correct="false">The compiler refuses to build it</button>
+        </div>
+        <p class="fb" aria-live="polite"></p>
+      </div>
+
+      <div class="done-row">
+        <button type="button" data-done="5" aria-pressed="false">Mark lesson 5 done</button>
+      </div>
+    </section>
+
+    <!-- ============ 6 ============ -->
+    <section class="lesson" id="lesson-6" data-lesson="6">
+      <div class="lesson-head">
+        <div class="lesson-num">6</div>
+        <div>
+          <h2>Lists: many values in order</h2>
+          <p class="goal">Keep a collection instead of ten separate variables.</p>
+        </div>
+      </div>
+
+      <p>
+        A <strong>list</strong> holds many values of the same kind, in order. You say what
+        kind it holds when you create it:
+      </p>
+
+      <div class="code" data-demo>
+        <div class="code-bar">
+          <span class="dots"><i></i><i></i><i></i></span>
+          <span class="name">pets.brick</span>
+          <button type="button" data-copy>Copy</button>
+          <button type="button" data-run>▶ Run</button>
+        </div>
+        <pre><code>function main() {
+    var pets = List(text)
+    pets.push("cat")
+    pets.push("dog")
+
+    for pet in pets {
+        print(pet)
+    }
+
+    print(pets.len)
+}</code></pre>
+        <div class="output"><span class="label">Output</span>cat
+dog
+2</div>
+      </div>
+
+      <p>The four words you need:</p>
+      <ul>
+        <li><code class="inline">List(text)</code> — “an empty list of text”. Use
+          <code class="inline">List(int)</code> for numbers.</li>
+        <li><code class="inline">.push(value)</code> — add an item to the end.</li>
+        <li><code class="inline">for pet in pets</code> — do the block once per item, with
+          <code class="inline">pet</code> holding the current one.</li>
+        <li><code class="inline">.len</code> — how many items are in it.</li>
+      </ul>
+
+      <p>You can also reach a specific item by position, counting from <strong>zero</strong>:
+        <code class="inline">pets[0]</code> is <code class="inline">"cat"</code>,
+        <code class="inline">pets[1]</code> is <code class="inline">"dog"</code>.</p>
+
+      <div class="note">
+        <strong>Why zero?</strong> It is a convention shared by nearly every language, and
+        it makes “how far from the start” and “which one is next” the same number. It feels
+        odd for a day and then never bothers you again.
+      </div>
+
+      <div class="try">
+        <h4>Try it</h4>
+        <p>Make a list of three numbers and print their total. Hint: start
+          <code class="inline">var total = 0</code> before the loop and add each item inside it.</p>
+        <button class="reveal" type="button" data-reveal>Show the answer</button>
+        <div class="hidden-answer">
+          <div class="code">
+            <pre><code>function main() {
+    var numbers = List(int)
+    numbers.push(4)
+    numbers.push(10)
+    numbers.push(7)
+
+    var total = 0
+    for n in numbers {
+        total = total + n
+    }
+
+    print(total)
+}</code></pre>
+          </div>
+          <p>Output: <code class="inline">21</code>.</p>
+        </div>
+      </div>
+
+      <div class="quiz" data-quiz>
+        <p class="q">In <code class="inline">pets[0]</code>, which pet do you get?</p>
+        <div class="opts">
+          <button class="opt" type="button" data-correct="false">the last one</button>
+          <button class="opt" type="button" data-correct="true">the first one</button>
+          <button class="opt" type="button" data-correct="false">a random one</button>
+        </div>
+        <p class="fb" aria-live="polite"></p>
+      </div>
+
+      <div class="done-row">
+        <button type="button" data-done="6" aria-pressed="false">Mark lesson 6 done</button>
+      </div>
+    </section>
+
+    <!-- ============ 7 ============ -->
+    <section class="lesson" id="lesson-7" data-lesson="7">
+      <div class="lesson-head">
+        <div class="lesson-num">7</div>
+        <div>
+          <h2>Functions: naming a chunk of work</h2>
+          <p class="goal">Write it once, use it many times.</p>
+        </div>
+      </div>
+
+      <p>
+        A function is an instruction you invent. It can take <strong>inputs</strong> (parameters)
+        and give back an <strong>output</strong> (a return value):
+      </p>
+
+      <div class="code" data-demo>
+        <div class="code-bar">
+          <span class="dots"><i></i><i></i><i></i></span>
+          <span class="name">greet.brick</span>
+          <button type="button" data-copy>Copy</button>
+          <button type="button" data-run>▶ Run</button>
+        </div>
+        <pre><code>function greet(name: text) -&gt; text {
+    return "Hello, " + name + "!"
+}
+
+function main() {
+    print(greet("Ada"))
+    print(greet("Brick"))
+}</code></pre>
+        <div class="output"><span class="label">Output</span>Hello, Ada!
+Hello, Brick!</div>
+      </div>
+
+      <p>Reading the signature out loud helps:</p>
+      <ul>
+        <li><code class="inline">function greet</code> — a function called <code class="inline">greet</code>.</li>
+        <li><code class="inline">(name: text)</code> — it takes one input called <code class="inline">name</code>,
+          and that input is text.</li>
+        <li><code class="inline">-&gt; text</code> — it hands back text. The arrow means “produces”.</li>
+        <li><code class="inline">return</code> — the answer. It also stops the function immediately.</li>
+      </ul>
+
+      <p>Then <code class="inline">greet("Ada")</code> becomes the text
+        <code class="inline">"Hello, Ada!"</code>, and <code class="inline">print</code> shows it.
+        Same function, different inputs — that is the whole point.</p>
+
+      <div class="note tip">
+        <strong>Why bother?</strong> Because when the message changes you edit one line, not
+        twenty. And because a well-named function turns code into something that reads like
+        a sentence: <code class="inline">print(greet("Ada"))</code>.
+      </div>
+
+      <div class="try">
+        <h4>Try it</h4>
+        <p>Write a function <code class="inline">twice(n: int) -&gt; int</code> that returns
+          twice its input, and print <code class="inline">twice(21)</code>.</p>
+        <button class="reveal" type="button" data-reveal>Show the answer</button>
+        <div class="hidden-answer">
+          <div class="code">
+            <pre><code>function twice(n: int) -&gt; int {
+    return n * 2
+}
+
+function main() {
+    print(twice(21))
+}</code></pre>
+          </div>
+          <p>Output: <code class="inline">42</code>.</p>
+        </div>
+      </div>
+
+      <div class="quiz" data-quiz>
+        <p class="q">What does <code class="inline">-&gt; int</code> after a function's parameters mean?</p>
+        <div class="opts">
+          <button class="opt" type="button" data-correct="false">the function takes an int</button>
+          <button class="opt" type="button" data-correct="true">the function gives back an int</button>
+          <button class="opt" type="button" data-correct="false">the function is named int</button>
+        </div>
+        <p class="fb" aria-live="polite"></p>
+      </div>
+
+      <div class="done-row">
+        <button type="button" data-done="7" aria-pressed="false">Mark lesson 7 done</button>
+      </div>
+    </section>
+
+    <!-- ============ 8 ============ -->
+    <section class="lesson" id="lesson-8" data-lesson="8">
+      <div class="lesson-head">
+        <div class="lesson-num">8</div>
+        <div>
+          <h2>Building text</h2>
+          <p class="goal">Mix numbers and words; assemble output piece by piece.</p>
+        </div>
+      </div>
+
+      <p>
+        Brick will not silently turn a number into text. You ask, with
+        <code class="inline">to_text</code>:
+      </p>
+
+      <div class="code" data-demo>
+        <div class="code-bar">
+          <span class="dots"><i></i><i></i><i></i></span>
+          <span class="name">totext.brick</span>
+          <button type="button" data-copy>Copy</button>
+          <button type="button" data-run>▶ Run</button>
+        </div>
+        <pre><code>function main() {
+    var age = 12
+    print("Age: " + to_text(age))
+}</code></pre>
+        <div class="output"><span class="label">Output</span>Age: 12</div>
+      </div>
+
+      <p>
+        When you need to glue many pieces together — inside a loop, say — use a
+        <strong>Builder</strong>. It collects pieces and produces the final text once:
+      </p>
+
+      <div class="code" data-demo>
+        <div class="code-bar">
+          <span class="dots"><i></i><i></i><i></i></span>
+          <span class="name">lines.brick</span>
+          <button type="button" data-copy>Copy</button>
+          <button type="button" data-run>▶ Run</button>
+        </div>
+        <pre><code>function main() {
+    var out = Builder()
+    var i = 1
+
+    while i &lt;= 3 {
+        out.add("line ")
+        out.add(to_text(i))
+        out.add("\n")
+        i = i + 1
+    }
+
+    print(out.build())
+}</code></pre>
+        <div class="output"><span class="label">Output</span>line 1
+line 2
+line 3</div>
+      </div>
+
+      <p>New pieces of notation:</p>
+      <ul>
+        <li><code class="inline">Builder()</code> — an empty collector.</li>
+        <li><code class="inline">.add(...)</code> — append one piece (text, or
+          <code class="inline">to_text(number)</code>).</li>
+        <li><code class="inline">.build()</code> — hand back everything collected, as one text.</li>
+        <li><code class="inline">"\n"</code> — a <strong>newline</strong>. Text written in quotes can
+          contain special codes like this; <code class="inline">\</code> introduces them.</li>
+      </ul>
+
+      <div class="note">
+        <strong>Why not just <code class="inline">+</code> in a loop?</strong> Each
+        <code class="inline">+</code> makes a brand-new copy of the whole text, so a thousand
+        small additions copy more and more each time. A Builder appends instead, and stays
+        fast. Use <code class="inline">+</code> for a few pieces, a Builder for many.
+      </div>
+
+      <div class="try">
+        <h4>Try it</h4>
+        <p>Produce exactly this, using a loop:</p>
+        <div class="code"><pre><code>#1
+#2
+#3</code></pre></div>
+        <button class="reveal" type="button" data-reveal>Show the answer</button>
+        <div class="hidden-answer">
+          <div class="code">
+            <pre><code>function main() {
+    var out = Builder()
+    var i = 1
+    while i &lt;= 3 {
+        out.add("#")
+        out.add(to_text(i))
+        out.add("\n")
+        i = i + 1
+    }
+    print(out.build())
+}</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="quiz" data-quiz>
+        <p class="q">What does <code class="inline">"\n"</code> mean inside text?</p>
+        <div class="opts">
+          <button class="opt" type="button" data-correct="false">the letters backslash and n</button>
+          <button class="opt" type="button" data-correct="true">a line break</button>
+          <button class="opt" type="button" data-correct="false">a tab</button>
+        </div>
+        <p class="fb" aria-live="polite"></p>
+      </div>
+
+      <div class="done-row">
+        <button type="button" data-done="8" aria-pressed="false">Mark lesson 8 done</button>
+      </div>
+    </section>
+
+    <!-- ============ 9 ============ -->
+    <section class="lesson" id="lesson-9" data-lesson="9">
+      <div class="lesson-head">
+        <div class="lesson-num">9</div>
+        <div>
+          <h2>Your own types</h2>
+          <p class="goal">Group related values so they travel together.</p>
+        </div>
+      </div>
+
+      <p>
+        So far every variable held one value. Often things belong together: a point has an
+        x and a y; a book has a title and a page count. A <strong>struct</strong> makes that
+        into a single new type:
+      </p>
+
+      <div class="code" data-demo>
+        <div class="code-bar">
+          <span class="dots"><i></i><i></i><i></i></span>
+          <span class="name">point.brick</span>
+          <button type="button" data-copy>Copy</button>
+          <button type="button" data-run>▶ Run</button>
+        </div>
+        <pre><code>struct Point {
+    x: int,
+    y: int
+}
+
+function main() {
+    var p = Point{ x: 3, y: 4 }
+
+    print(p.x)
+    print(p.y)
+}</code></pre>
+        <div class="output"><span class="label">Output</span>3
+4</div>
+      </div>
+
+      <p>Reading it:</p>
+      <ul>
+        <li><code class="inline">struct Point { ... }</code> — declare a new type named <code class="inline">Point</code>.</li>
+        <li>The fields are named and typed, separated by commas.</li>
+        <li><code class="inline">Point{ x: 3, y: 4 }</code> — build one with those values.</li>
+        <li><code class="inline">p.x</code> — reach inside with a dot.</li>
+      </ul>
+
+      <p>A function can change a struct in place if you ask with <code class="inline">&amp;mut</code>:</p>
+
+      <div class="code" data-demo>
+        <div class="code-bar">
+          <span class="dots"><i></i><i></i><i></i></span>
+          <span class="name">move.brick</span>
+          <button type="button" data-copy>Copy</button>
+          <button type="button" data-run>▶ Run</button>
+        </div>
+        <pre><code>struct Point {
+    x: int,
+    y: int
+}
+
+function move(p: &amp;mut Point) {
+    p.x = p.x + 1
+    p.y = p.y + 1
+}
+
+function main() {
+    var a = Point{ x: 1, y: 2 }
+    move(&amp;mut a)
+    print(a.x)
+    print(a.y)
+}</code></pre>
+        <div class="output"><span class="label">Output</span>2
+3</div>
+      </div>
+
+      <div class="note">
+        <strong><code class="inline">&amp;mut</code> in one sentence:</strong> “let this function
+        edit my value, not a copy of it”. Without it, <code class="inline">move</code> would
+        change a copy and <code class="inline">a</code> would stay put. Brick makes you say
+        which you mean, and then checks it for you.
+      </div>
+
+      <div class="try">
+        <h4>Try it</h4>
+        <p>Make a struct <code class="inline">Book</code> with <code class="inline">title: text</code>
+          and <code class="inline">pages: int</code>. Create one and print its title.</p>
+        <button class="reveal" type="button" data-reveal>Show the answer</button>
+        <div class="hidden-answer">
+          <div class="code">
+            <pre><code>struct Book {
+    title: text,
+    pages: int
+}
+
+function main() {
+    var b = Book{ title: "The Little Brick", pages: 120 }
+    print(b.title)
+    print(b.pages)
+}</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="quiz" data-quiz>
+        <p class="q">Why does <code class="inline">move</code> take <code class="inline">&amp;mut Point</code> instead of <code class="inline">Point</code>?</p>
+        <div class="opts">
+          <button class="opt" type="button" data-correct="false">It is faster</button>
+          <button class="opt" type="button" data-correct="true">So it can change the caller's value instead of a copy</button>
+          <button class="opt" type="button" data-correct="false">Because Point has two fields</button>
+        </div>
+        <p class="fb" aria-live="polite"></p>
+      </div>
+
+      <div class="done-row">
+        <button type="button" data-done="9" aria-pressed="false">Mark lesson 9 done</button>
+      </div>
+    </section>
+
+    <!-- ============ 10 ============ -->
+    <section class="lesson" id="lesson-10" data-lesson="10">
+      <div class="lesson-head">
+        <div class="lesson-num">10</div>
+        <div>
+          <h2>Choices that can't be forgotten</h2>
+          <p class="goal">Enums and match: make the impossible impossible.</p>
+        </div>
+      </div>
+
+      <p>
+        An <strong>enum</strong> is a type whose value is exactly one of a few named cases.
+        Each case can carry data. Here a shape is either a circle (with a radius) or a
+        square (with a side):
+      </p>
+
+      <div class="code" data-demo>
+        <div class="code-bar">
+          <span class="dots"><i></i><i></i><i></i></span>
+          <span class="name">shape.brick</span>
+          <button type="button" data-copy>Copy</button>
+          <button type="button" data-run>▶ Run</button>
+        </div>
+        <pre><code>enum Shape {
+    Circle(int),
+    Square(int)
+}
+
+function area(s: Shape) -&gt; int {
+    var result = 0
+    match s {
+        Shape.Circle(r) =&gt; result = 3 * r * r
+        Shape.Square(side) =&gt; result = side * side
+    }
+    return result
+}
+
+function main() {
+    print(area(Shape.Circle(2)))
+    print(area(Shape.Square(3)))
+}</code></pre>
+        <div class="output"><span class="label">Output</span>12
+9</div>
+      </div>
+
+      <p>Reading it:</p>
+      <ul>
+        <li><code class="inline">Shape.Circle(int)</code> — the case is called Circle and it
+          carries one whole number.</li>
+        <li><code class="inline">match s { ... }</code> — look at which case <code class="inline">s</code> is,
+          and run the matching line. <code class="inline">Shape.Circle(r)</code> also pulls the
+          number out under the name <code class="inline">r</code>.</li>
+        <li>The block must handle <em>every</em> case. Forget one and Brick says so before you
+          ever run the program.</li>
+      </ul>
+
+      <div class="note tip">
+        <strong>This is the big idea.</strong> Most bugs are “I forgot a case”. Here the
+        compiler will not let you forget: add a new shape and every <code class="inline">match</code>
+        that has not been updated is an error. That is why Brick programs use enums for
+        results instead of magic numbers — see <code class="inline">Result.Ok</code> /
+        <code class="inline">Result.Err</code> in the project's own examples.
+      </div>
+
+      <div class="try">
+        <h4>Try it</h4>
+        <p>Add a third case, <code class="inline">Rect(int, int)</code>, to the enum, and a
+          matching line in <code class="inline">match</code>. Notice that until you add that
+          line, the compiler complains.</p>
+        <button class="reveal" type="button" data-reveal>Show the answer</button>
+        <div class="hidden-answer">
+          <div class="code">
+            <pre><code>enum Shape {
+    Circle(int),
+    Square(int),
+    Rect(int, int)
+}
+
+function area(s: Shape) -&gt; int {
+    var result = 0
+    match s {
+        Shape.Circle(r) =&gt; result = 3 * r * r
+        Shape.Square(side) =&gt; result = side * side
+        Shape.Rect(w, h) =&gt; result = w * h
+    }
+    return result
+}</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="quiz" data-quiz>
+        <p class="q">What does Brick do if a <code class="inline">match</code> is missing a case?</p>
+        <div class="opts">
+          <button class="opt" type="button" data-correct="false">Runs the first case instead</button>
+          <button class="opt" type="button" data-correct="false">Crashes at runtime</button>
+          <button class="opt" type="button" data-correct="true">Refuses to compile, and tells you which case</button>
+        </div>
+        <p class="fb" aria-live="polite"></p>
+      </div>
+
+      <div class="done-row">
+        <button type="button" data-done="10" aria-pressed="false">Mark lesson 10 done</button>
+      </div>
+    </section>
+
+    <!-- ============ 11 ============ -->
+    <section class="lesson" id="lesson-11" data-lesson="11">
+      <div class="lesson-head">
+        <div class="lesson-num">11</div>
+        <div>
+          <h2>Putting it together</h2>
+          <p class="goal">Two real programs from everything above.</p>
+        </div>
+      </div>
+
+      <p>Nothing new here — just the pieces you already have, combined.</p>
+
+      <h3>FizzBuzz</h3>
+      <p>A classic interview question. Print 1 to 15, but say <em>Fizz</em> for multiples of 3,
+        <em>Buzz</em> for multiples of 5, and <em>FizzBuzz</em> for both:</p>
+
+      <div class="code" data-demo>
+        <div class="code-bar">
+          <span class="dots"><i></i><i></i><i></i></span>
+          <span class="name">fizzbuzz.brick</span>
+          <button type="button" data-copy>Copy</button>
+          <button type="button" data-run>▶ Run</button>
+        </div>
+        <pre><code>function main() {
+    var i = 1
+
+    while i &lt;= 15 {
+        if i % 15 == 0 {
+            print("FizzBuzz")
+        } else if i % 3 == 0 {
+            print("Fizz")
+        } else if i % 5 == 0 {
+            print("Buzz")
+        } else {
+            print(i)
+        }
+        i = i + 1
+    }
+}</code></pre>
+        <div class="output"><span class="label">Output</span>1
+2
+Fizz
+4
+Buzz
+Fizz
+7
+8
+Fizz
+Buzz
+11
+Fizz
+13
+14
+FizzBuzz</div>
+      </div>
+
+      <p>Why <code class="inline">i % 15</code> first? Because 15 is the multiple of both 3 and 5.
+        Check it before the others, or you would print <em>Fizz</em> and never reach
+        <em>FizzBuzz</em>.</p>
+
+      <h3>Counting letters in a word</h3>
+      <p>
+        Text can be walked like a list of letters, and <code class="inline">word[i]</code> gives
+        you one letter to compare. Here is a function that counts how often a letter appears:
+      </p>
+
+      <div class="code" data-demo>
+        <div class="code-bar">
+          <span class="dots"><i></i><i></i><i></i></span>
+          <span class="name">count.brick</span>
+          <button type="button" data-copy>Copy</button>
+          <button type="button" data-run>▶ Run</button>
+        </div>
+        <pre><code>function countLetter(word: text, letter: text) -&gt; int {
+    var n = 0
+    var i = 0
+
+    while i &lt; word.len {
+        if word[i] == letter[0] {
+            n = n + 1
+        }
+        i = i + 1
+    }
+
+    return n
+}
+
+function main() {
+    print(countLetter("banana", "a"))
+}</code></pre>
+        <div class="output"><span class="label">Output</span>3</div>
+      </div>
+
+      <div class="try">
+        <h4>Try it</h4>
+        <p>Change the program to count the letter <code class="inline">"n"</code> in
+          <code class="inline">"banana"</code>. Then try counting in a word of your own.</p>
+        <button class="reveal" type="button" data-reveal>Show the answer</button>
+        <div class="hidden-answer">
+          <p>Replace <code class="inline">"a"</code> with <code class="inline">"n"</code> and you get
+            <code class="inline">2</code>. (<code class="inline">letter[0]</code> takes the first
+            letter of the text, so <code class="inline">word[i]</code> and
+            <code class="inline">letter[0]</code> are both single letters.)</p>
+        </div>
+      </div>
+
+      <div class="predict" data-predict="6">
+        <p style="margin:.6rem 0 0"><strong>Predict the output:</strong></p>
+        <div class="code" style="width:100%;margin:.3rem 0 .5rem">
+          <pre><code>function main() {
+    var total = 0
+    for n in numbers {
+        total = total + n
+    }
+    print(total)
+}</code></pre>
+        </div>
+        <p style="margin:0;font-size:.9rem;color:var(--muted)">…where <code class="inline">numbers</code> holds <code class="inline">1, 2, 3</code>.</p>
+        <input type="text" aria-label="Your predicted output" placeholder="type the number">
+        <button type="button" data-check>Check</button>
+        <span class="verdict" aria-live="polite"></span>
+      </div>
+
+      <div class="done-row">
+        <button type="button" data-done="11" aria-pressed="false">Mark lesson 11 done</button>
+      </div>
+    </section>
+
+    <!-- ============ 12 ============ -->
+    <section class="lesson" id="lesson-12" data-lesson="12">
+      <div class="lesson-head">
+        <div class="lesson-num">12</div>
+        <div>
+          <h2>Where to go next</h2>
+          <p class="goal">Install it, break things, read real code.</p>
+        </div>
+      </div>
+
+      <p>You now know enough Brick to write and read small programs. The next step is
+        to have it on your own machine.</p>
+
+      <h3 id="install">Install Brick</h3>
+      <p>You need two things: <strong>Go 1.24+</strong> (to build the compiler) and a
+        <strong>C compiler</strong> such as <code class="inline">gcc</code> or
+        <code class="inline">clang</code>. Then, in the project folder:</p>
+
+      <div class="code" data-demo>
+        <div class="code-bar">
+          <span class="dots"><i></i><i></i><i></i></span>
+          <span class="name">terminal</span>
+          <button type="button" data-copy>Copy</button>
+        </div>
+        <pre><code>make build                 # builds ./bin/brick
+./bin/brick run hello.brick</code></pre>
+      </div>
+
+      <p>And when you want to see what your program turned into:</p>
+
+      <div class="code">
+        <div class="code-bar">
+          <span class="dots"><i></i><i></i><i></i></span>
+          <span class="name">terminal</span>
+          <button type="button" data-copy>Copy</button>
+        </div>
+        <pre><code>./bin/brick emit hello.brick     # print the C that was generated
+./bin/brick check hello.brick    # only check for mistakes, run nothing
+./bin/brick fmt hello.brick      # reformat nicely</code></pre>
+      </div>
+
+      <h3>What to do first</h3>
+      <div class="cards">
+        <div class="card">
+          <h4>Read the examples</h4>
+          <p><code class="inline">examples/*.brick</code> — each file is short and plots one idea.
+            Run them, then change one number and run again.</p>
+        </div>
+        <div class="card">
+          <h4>Break something on purpose</h4>
+          <p>Delete a brace, misspell a variable, compare text with a number. Read the error.
+            Learning to read errors is half of programming.</p>
+        </div>
+        <div class="card">
+          <h4>Write a tiny tool</h4>
+          <p>A unit converter, a word counter, a todo list that prints. Small, finished
+            programs teach more than big unfinished ones.</p>
+        </div>
+        <div class="card">
+          <h4>Read the spec</h4>
+          <p><code class="inline">docs/SPEC.md</code> is the full language. Skim it once;
+            you will recognise most of it now.</p>
+        </div>
+      </div>
+
+      <h3>What Brick is good at</h3>
+      <p>Honestly, so you pick the right projects:</p>
+      <ul>
+        <li><strong>Good:</strong> command-line tools, text and file processing, compilers and
+          language tools, small servers, anything you would write in C but want to read like a
+          modern language. It compiles to C and runs at C speed.</li>
+        <li><strong>Not yet:</strong> threads and heavy concurrency, networking and TLS out of
+          the box, huge third-party libraries, graphical apps. Those need pieces Brick does
+          not ship today.</li>
+      </ul>
+
+      <p>That is the whole tour. Go write something small — and when it breaks,
+        start with a missing brace or a single <code class="inline">=</code> where you meant
+        <code class="inline">==</code>.</p>
+
+      <div class="done-row">
+        <button type="button" data-done="12" aria-pressed="false">Mark lesson 12 done</button>
+      </div>
+    </section>
+
+    <!-- ============ CHEAT SHEET ============ -->
+    <section class="lesson" id="cheatsheet">
+      <div class="lesson-head">
+        <div class="lesson-num">§</div>
+        <div>
+          <h2>One-page cheat sheet</h2>
+          <p class="goal">Everything from the twelve lessons, compressed.</p>
+        </div>
+      </div>
+
+      <table class="cheat">
+        <thead><tr><th>You want to…</th><th>Write</th></tr></thead>
+        <tbody>
+          <tr><td>start a program</td><td><code>function main() { ... }</code></td></tr>
+          <tr><td>show something</td><td><code>print("text")</code> · <code>print(2 + 3)</code></td></tr>
+          <tr><td>make a variable</td><td><code>var score = 10</code></td></tr>
+          <tr><td>change it</td><td><code>score = 25</code></td></tr>
+          <tr><td>decide</td><td><code>if x &gt; 3 { ... } else if ... { ... } else { ... }</code></td></tr>
+          <tr><td>compare</td><td><code>==</code> equal · <code>!=</code> not equal · <code>&gt;</code> · <code>&lt;</code> · <code>&gt;=</code> · <code>&lt;=</code></td></tr>
+          <tr><td>repeat</td><td><code>while n &gt; 0 { ... }</code> · <code>for x in xs { ... }</code></td></tr>
+          <tr><td>keep a list</td><td><code>var xs = List(int)</code> + <code>xs.push(4)</code> · <code>xs.len</code> · <code>xs[0]</code></td></tr>
+          <tr><td>make a function</td><td><code>function twice(n: int) -&gt; int</code> then <code>{ return n * 2 }</code></td></tr>
+          <tr><td>number → text</td><td><code>to_text(n)</code></td></tr>
+          <tr><td>many pieces of text</td><td><code>var b = Builder()</code> + <code>b.add(...)</code> + <code>b.build()</code></td></tr>
+          <tr><td>a line break</td><td><code>"\n"</code></td></tr>
+          <tr><td>your own type</td><td><code>struct Point { x: int, y: int }</code> then <code>Point{ x: 3, y: 4 }</code></td></tr>
+          <tr><td>let a function edit a value</td><td><code>function move(p: &amp;mut Point)</code> and call <code>move(&amp;mut a)</code></td></tr>
+          <tr><td>one of several cases</td><td><code>enum Shape { Circle(int), Square(int) }</code> + <code>match s { ... }</code></td></tr>
+          <tr><td>leave a loop early</td><td><code>break</code></td></tr>
+          <tr><td>skip to the next round</td><td><code>continue</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ============ MISTAKES ============ -->
+    <section class="lesson" id="mistakes">
+      <div class="lesson-head">
+        <div class="lesson-num">!</div>
+        <div>
+          <h2>Common mistakes, and what they mean</h2>
+          <p class="goal">If something goes wrong, check this list first.</p>
+        </div>
+      </div>
+
+      <table class="cheat">
+        <thead><tr><th>What you wrote</th><th>What Brick says / what happens</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>if x = 3 { ... }</code></td>
+            <td>An error: <code>=</code> stores a value, it does not compare. You want <code>==</code>.</td>
+          </tr>
+          <tr>
+            <td>a missing <code>}</code></td>
+            <td>“expected }” pointing at the end of the file. Count your braces.</td>
+          </tr>
+          <tr>
+            <td><code>print(Hello)</code></td>
+            <td>Tries to find a variable called <code>Hello</code>. Text needs quotes: <code>print("Hello")</code>.</td>
+          </tr>
+          <tr>
+            <td><code>print("Age: " + 12)</code></td>
+            <td>Text and number cannot be glued. Use <code>to_text(12)</code>.</td>
+          </tr>
+          <tr>
+            <td><code>var x = 1</code> then <code>var x = 2</code></td>
+            <td>Already declared in this scope. Just write <code>x = 2</code> the second time.</td>
+          </tr>
+          <tr>
+            <td><code>while n &gt; 0 { print(n) }</code></td>
+            <td>Compiles fine, runs forever. Nothing inside changes <code>n</code>.</td>
+          </tr>
+          <tr>
+            <td><code>xs[5]</code> on a 3-item list</td>
+            <td>The program stops with an out-of-range error. Positions are 0…len-1.</td>
+          </tr>
+          <tr>
+            <td><code>function double(n: int)</code></td>
+            <td>Brick writes C, so a handful of names are taken by C itself
+              (<code>double</code>, <code>float</code>, <code>case</code>, <code>static</code>, …).
+              Pick another name: <code>twice</code>, <code>half</code>, <code>average</code>.</td>
+          </tr>
+          <tr>
+            <td>a function with <code>-&gt; int</code> that never returns</td>
+            <td>An error: every path must give a value back.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="note tip">
+        <strong>How to read an error.</strong> The first number is the line, the second is
+        roughly the column, then a message in plain words. Start at the line it names; if
+        that line looks fine, the real mistake is usually a line or two above.
+      </div>
+    </section>
+
+    <footer>
+      <p><strong>Learn Brick</strong> — a from-zero guide that ships with the Brick repository.
+        Every program on this page was run with the real compiler; the outputs shown are its
+        actual output.</p>
+      <p>Next: the <code class="inline">examples/</code> folder, <code class="inline">docs/SPEC.md</code>,
+        and <code class="inline">make build</code>.</p>
+    </footer>
+  </main>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------------- syntax highlighting ---------------- */
+  var KEYWORDS = new Set(["function", "var", "if", "else", "while", "for", "in",
+    "return", "break", "continue", "struct", "enum", "match", "const", "import",
+    "extern", "true", "false", "arena", "and", "or", "not", "defer"]);
+  var TYPES = new Set(["int", "float", "bool", "text", "bytes", "List", "Map",
+    "Builder", "Result", "void"]);
+  var BUILTINS = new Set(["print", "eprint", "to_text", "to_bytes", "bytes",
+    "print_bytes", "exit", "system", "getenv", "read_dir", "is_dir", "slice",
+    "len", "panic", "args"]);
+
+  function esc(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function highlight(code) {
+    var out = "";
+    var i = 0;
+    var n = code.length;
+    while (i < n) {
+      var c = code[i];
+
+      // comment
+      if (c === "/" && code[i + 1] === "/") {
+        var end = code.indexOf("\n", i);
+        if (end === -1) end = n;
+        out += '<span class="tok-com">' + esc(code.slice(i, end)) + "</span>";
+        i = end;
+        continue;
+      }
+
+      // string
+      if (c === '"') {
+        var j = i + 1;
+        while (j < n && code[j] !== '"') {
+          if (code[j] === "\\") j++;
+          j++;
+        }
+        j = Math.min(j + 1, n);
+        out += '<span class="tok-str">' + esc(code.slice(i, j)) + "</span>";
+        i = j;
+        continue;
+      }
+
+      // number
+      if (c >= "0" && c <= "9") {
+        var k = i;
+        while (k < n && /[0-9._]/.test(code[k])) k++;
+        out += '<span class="tok-num">' + esc(code.slice(i, k)) + "</span>";
+        i = k;
+        continue;
+      }
+
+      // identifier
+      if (/[A-Za-z_]/.test(c)) {
+        var m = i;
+        while (m < n && /[A-Za-z0-9_]/.test(code[m])) m++;
+        var word = code.slice(i, m);
+        var cls = null;
+        if (KEYWORDS.has(word)) cls = "tok-kw";
+        else if (TYPES.has(word)) cls = "tok-type";
+        else if (BUILTINS.has(word)) cls = "tok-builtin";
+        else if (code[m] === "(") cls = "tok-fn";
+        out += cls ? '<span class="' + cls + '">' + esc(word) + "</span>" : esc(word);
+        i = m;
+        continue;
+      }
+
+      out += esc(c);
+      i++;
+    }
+    return out;
+  }
+
+  document.querySelectorAll("pre code").forEach(function (node) {
+    // Skip blocks that are already plain-text (shell snippets are fine to highlight).
+    node.innerHTML = highlight(node.textContent);
+  });
+
+  /* ---------------- copy buttons ---------------- */
+  document.querySelectorAll("[data-copy]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var block = btn.closest(".code");
+      var code = block ? block.querySelector("pre code") : null;
+      if (!code) return;
+      var text = code.textContent;
+      var done = function () {
+        var old = btn.textContent;
+        btn.textContent = "Copied";
+        setTimeout(function () { btn.textContent = old; }, 1200);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, done);
+      } else {
+        var ta = document.createElement("textarea");
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand("copy"); } catch (e) {}
+        document.body.removeChild(ta);
+        done();
+      }
+    });
+  });
+
+  /* ---------------- run buttons ---------------- */
+  document.querySelectorAll("[data-run]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var block = btn.closest(".code");
+      var out = block ? block.querySelector(".output") : null;
+      if (!out) return;
+      var showing = out.classList.toggle("show");
+      btn.textContent = showing ? "▶ Hide output" : "▶ Run";
+    });
+  });
+
+  /* ---------------- reveal answers ---------------- */
+  document.querySelectorAll("[data-reveal]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var box = btn.nextElementSibling;
+      if (!box) return;
+      var open = box.classList.toggle("show");
+      btn.textContent = open ? "Hide the answer" : "Show the answer";
+      if (open) {
+        box.querySelectorAll("pre code").forEach(function (node) {
+          node.innerHTML = highlight(node.textContent);
+        });
+      }
+    });
+  });
+
+  /* ---------------- quizzes ---------------- */
+  document.querySelectorAll(".quiz").forEach(function (quiz) {
+    var fb = quiz.querySelector(".fb");
+    var opts = quiz.querySelectorAll(".opt");
+    opts.forEach(function (opt) {
+      opt.addEventListener("click", function () {
+        var right = opt.getAttribute("data-correct") === "true";
+        opts.forEach(function (o) {
+          o.disabled = true;
+          if (o.getAttribute("data-correct") === "true") o.classList.add("correct");
+        });
+        if (!right) opt.classList.add("wrong");
+        fb.className = "fb " + (right ? "ok" : "no");
+        fb.textContent = right
+          ? "Correct."
+          : "Not quite — the highlighted answer is the right one.";
+      });
+    });
+  });
+
+  /* ---------------- predict-the-output ---------------- */
+  document.querySelectorAll("[data-predict]").forEach(function (box) {
+    var expected = box.getAttribute("data-predict").trim().toLowerCase();
+    var input = box.querySelector("input");
+    var verdict = box.querySelector(".verdict");
+    var btn = box.querySelector("[data-check]");
+    var check = function () {
+      var got = (input.value || "").trim().toLowerCase();
+      if (got === "") {
+        verdict.textContent = "Type a guess first.";
+        verdict.style.color = "var(--muted)";
+        return;
+      }
+      if (got === expected) {
+        verdict.textContent = "✓ Correct — 1 + 2 + 3 = 6.";
+        verdict.style.color = "var(--green)";
+      } else {
+        verdict.textContent = "Not yet. Add them one step at a time.";
+        verdict.style.color = "var(--red)";
+      }
+    };
+    btn.addEventListener("click", check);
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") check();
+    });
+  });
+
+  /* ---------------- progress ---------------- */
+  var KEY = "brick-learn-progress-v1";
+  var TOTAL = 12;
+  var done = {};
+
+  try {
+    var raw = localStorage.getItem(KEY);
+    if (raw) done = JSON.parse(raw) || {};
+  } catch (e) { done = {}; }
+
+  function storage(on) {
+    try {
+      if (on) localStorage.setItem(KEY, JSON.stringify(done));
+      else localStorage.removeItem(KEY);
+    } catch (e) { /* private mode: progress simply does not persist */ }
+  }
+
+  function refresh() {
+    var count = 0;
+    for (var k in done) if (done[k]) count++;
+    var pct = Math.round((count / TOTAL) * 100);
+    var fill = document.getElementById("progressFill");
+    var bar = document.getElementById("progressBar");
+    var label = document.getElementById("progressLabel");
+    fill.style.width = pct + "%";
+    if (bar) bar.setAttribute("aria-valuenow", String(pct));
+    label.textContent = count + " / " + TOTAL;
+    document.querySelectorAll("[data-done]").forEach(function (btn) {
+      var n = btn.getAttribute("data-done");
+      var on = !!done[n];
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+      btn.textContent = on ? "✓ Lesson " + n + " done" : "Mark lesson " + n + " done";
+    });
+    document.querySelectorAll("nav.toc a[href^='#lesson-']").forEach(function (a) {
+      var n = a.getAttribute("href").replace("#lesson-", "");
+      a.classList.toggle("done", !!done[n]);
+    });
+  }
+
+  document.querySelectorAll("[data-done]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var n = btn.getAttribute("data-done");
+      done[n] = !done[n];
+      storage(true);
+      refresh();
+    });
+  });
+
+  refresh();
+
+  /* ---------------- mobile menu ---------------- */
+  var menuBtn = document.getElementById("menuBtn");
+  var toc = document.getElementById("toc");
+  if (menuBtn && toc) {
+    menuBtn.addEventListener("click", function () {
+      var open = toc.classList.toggle("open");
+      menuBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    toc.addEventListener("click", function (e) {
+      if (e.target.closest("a")) {
+        toc.classList.remove("open");
+        menuBtn.setAttribute("aria-expanded", "false");
+      }
+    });
+  }
+
+  /* ---------------- active link on scroll ---------------- */
+  var links = {};
+  document.querySelectorAll("nav.toc a[href^='#']").forEach(function (a) {
+    links[a.getAttribute("href").slice(1)] = a;
+  });
+
+  if ("IntersectionObserver" in window) {
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        var link = links[entry.target.id];
+        if (!link) return;
+        if (entry.isIntersecting) {
+          Object.keys(links).forEach(function (id) { links[id].classList.remove("active"); });
+          link.classList.add("active");
+        }
+      });
+    }, { rootMargin: "-15% 0px -70% 0px", threshold: 0 });
+    document.querySelectorAll("main section[id]").forEach(function (s) { obs.observe(s); });
+  }
+})();
+</script>
+</body>
+</html>

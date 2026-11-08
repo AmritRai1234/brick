@@ -22,6 +22,9 @@ make build              # builds ./bin/brick
 You need **Go 1.24+** and a C compiler (`cc`, `gcc`, or `clang`). Override the C
 compiler with `BRICK_CC=clang`.
 
+**New to programming?** Start with [`docs/learn/index.html`](docs/learn/index.html)
+— a from-zero, twelve-lesson guide in plain English. Open it in any browser.
+
 ## Commands
 
 | Command | What it does |
@@ -458,7 +461,8 @@ away:
 | `v0.3.24` | `builder.add(to_text(n))` appends digits straight into the buffer; `to_text` for ints no longer uses `snprintf` |
 | `v0.3.25` | `AGENTS.md` + the `brick-lang` agent skill: invariants, verification ladder, debugging playbook |
 | `v0.3.26` | self-hosted compiler is linear again: cache `text.len` in the scanner, stop slicing the source per token (~70x on large inputs) |
-| `v0.3.27` | four-way HTTP server benchmark (`make bench-server`): Brick matches hand-written C at ~20–26 µs of CPU per request; Go ~1.6–2.2x, Rust ~1.1–1.3x (current) |
+| `v0.3.27` | four-way HTTP server benchmark (`make bench-server`): Brick matches hand-written C at ~20–26 µs of CPU per request; Go ~1.6–2.2x, Rust ~1.1–1.3x |
+| `v0.3.28` | `docs/learn/index.html`: a from-zero, twelve-lesson guide to Brick for people who have never written code (current) |
 
 ```sh
 git tag                     # list the tags
