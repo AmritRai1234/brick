@@ -1,0 +1,169 @@
+// tools/csv2json.brick — Convert CSV to JSON or NDJSON.
+//
+// Usage:
+//   csv2json <file.csv> [--pretty] [--ndjson]
+//   cat data.csv | csv2json [--pretty] [--ndjson]
+
+import "../std/strings"
+import "../std/flags"
+
+// parse_csv_line parses one line of CSV, properly handling quoted fields
+// containing commas and escaped quotes ("").
+function parse_csv_line(line: text) -> List(text) {
+    var fields = List(text)
+    var n = line.len
+    var i = 0
+    var buf = Builder()
+    var in_quotes = false
+
+    while i < n {
+        var c = line[i]
+        if in_quotes {
+            if c == '"' {
+                if i + 1 < n && line[i + 1] == '"' {
+                    buf.add("\"")
+                    i = i + 1
+                } else {
+                    in_quotes = false
+                }
+            } else {
+                buf.add(slice(line, i, i + 1))
+            }
+        } else {
+            if c == '"' {
+                in_quotes = true
+            } else if c == ',' {
+                fields.push(buf.build())
+                buf = Builder()
+            } else {
+                buf.add(slice(line, i, i + 1))
+            }
+        }
+        i = i + 1
+    }
+    fields.push(buf.build())
+    return fields
+}
+
+function main() {
+    var argv = args()
+    var val_flags = List(text)
+    var pos = positionals(argv, val_flags)
+
+    var file = "-"
+    if pos.len > 0 {
+        file = pos[0]
+    }
+
+    var pretty = has_flag(argv, "--pretty") || has_flag(argv, "-p")
+    var ndjson = has_flag(argv, "--ndjson")
+
+    var src = read_file(file)
+    var raw_lines = lines(src)
+
+    if raw_lines.len == 0 {
+        if ndjson == false {
+            print("[]")
+        }
+        return
+    }
+
+    // Header row
+    var headers = parse_csv_line(raw_lines[0])
+    var num_cols = headers.len
+
+    var out = Builder()
+    if ndjson == false {
+        out.add("[")
+        if pretty {
+            out.add("\n")
+        }
+    }
+
+    var row_idx = 1
+    var first_record = true
+
+    while row_idx < raw_lines.len {
+        var line = trim(raw_lines[row_idx])
+        if line.len == 0 {
+            row_idx = row_idx + 1
+            continue
+        }
+
+        var values = parse_csv_line(line)
+
+        if ndjson {
+            out.add("{")
+            var col = 0
+            while col < num_cols {
+                if col > 0 {
+                    out.add(",")
+                }
+                var key = json_escape(trim(headers[col]))
+                var val = ""
+                if col < values.len {
+                    val = json_escape(trim(values[col]))
+                }
+                out.add("\"" + key + "\":\"" + val + "\"")
+                col = col + 1
+            }
+            out.add("}\n")
+        } else {
+            if first_record == false {
+                out.add(",")
+                if pretty {
+                    out.add("\n")
+                }
+            }
+            first_record = false
+
+            if pretty {
+                out.add("  {\n")
+                var col = 0
+                while col < num_cols {
+                    var key = json_escape(trim(headers[col]))
+                    var val = ""
+                    if col < values.len {
+                        val = json_escape(trim(values[col]))
+                    }
+                    out.add("    \"" + key + "\": \"" + val + "\"")
+                    if col + 1 < num_cols {
+                        out.add(",")
+                    }
+                    out.add("\n")
+                    col = col + 1
+                }
+                out.add("  }")
+            } else {
+                out.add("{")
+                var col = 0
+                while col < num_cols {
+                    if col > 0 {
+                        out.add(",")
+                    }
+                    var key = json_escape(trim(headers[col]))
+                    var val = ""
+                    if col < values.len {
+                        val = json_escape(trim(values[col]))
+                    }
+                    out.add("\"" + key + "\":\"" + val + "\"")
+                    col = col + 1
+                }
+                out.add("}")
+            }
+        }
+
+        row_idx = row_idx + 1
+    }
+
+    if ndjson == false {
+        if pretty {
+            out.add("\n]\n")
+        } else {
+            out.add("]\n")
+        }
+    }
+
+    print(out.build())
+}
+

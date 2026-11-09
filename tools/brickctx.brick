@@ -1,0 +1,310 @@
+// brickctx: walk a source tree and print a compact, signature-level outline.
+//
+//   brickctx <dir> [--max-lines N] [--json]
+//
+// For every source file it prints the path, its line count, and each top-level
+// declaration line (function/struct/enum/class/def/fn/...) with its line number,
+// so another tool or agent can understand a codebase cheaply. --json emits one
+// NDJSON object per file. --max-lines caps the number of declaration lines.
+
+import "../std/strings"
+import "../std/path"
+import "../std/flags"
+
+struct Stats {
+    files: int,
+    decls: int,
+    trunc: int,
+}
+
+function is_skip(name: text) -> int {
+    if name == ".git" || name == "node_modules" || name == "bin" || name == "build" {
+        return 1
+    }
+    if name == "dist" || name == "target" || name == "vendor" || name == ".cache" {
+        return 1
+    }
+    if name == "out" || name == ".venv" || name == "__pycache__" {
+        return 1
+    }
+    return 0
+}
+
+function is_source(name: text) -> int {
+    var ext = extension(name)
+    if ext == ".brick" || ext == ".c" || ext == ".h" || ext == ".cc" || ext == ".cpp" || ext == ".hpp" {
+        return 1
+    }
+    if ext == ".go" || ext == ".py" || ext == ".rs" || ext == ".js" || ext == ".ts" || ext == ".jsx" || ext == ".tsx" {
+        return 1
+    }
+    if ext == ".java" || ext == ".rb" || ext == ".sh" || ext == ".lua" || ext == ".zig" || ext == ".swift" || ext == ".kt" || ext == ".cs" {
+        return 1
+    }
+    return 0
+}
+
+// starts_at reports whether src beginning at i matches kw. Bounds-checked so a
+// short line at end of file cannot read past the text.
+function starts_at(src: text, i: int, kw: text) -> int {
+    var n = src.len
+    var m = kw.len
+    if i + m > n {
+        return 0
+    }
+    var k = 0
+    while k < m {
+        if src[i + k] != kw[k] {
+            return 0
+        }
+        k = k + 1
+    }
+    return 1
+}
+
+// is_decl_line: the line starting at byte i is top-level (no leading space/tab)
+// and begins with a declaration keyword.
+function is_decl_line(src: text, i: int) -> int {
+    var first = src[i]
+    if first == ' ' {
+        return 0
+    }
+    if first == '\t' {
+        return 0
+    }
+    if starts_at(src, i, "function ") == 1 {
+        return 1
+    }
+    if starts_at(src, i, "struct ") == 1 {
+        return 1
+    }
+    if starts_at(src, i, "enum ") == 1 {
+        return 1
+    }
+    if starts_at(src, i, "const ") == 1 {
+        return 1
+    }
+    if starts_at(src, i, "type ") == 1 {
+        return 1
+    }
+    if starts_at(src, i, "class ") == 1 {
+        return 1
+    }
+    if starts_at(src, i, "def ") == 1 {
+        return 1
+    }
+    if starts_at(src, i, "fn ") == 1 {
+        return 1
+    }
+    if starts_at(src, i, "func ") == 1 {
+        return 1
+    }
+    if starts_at(src, i, "pub ") == 1 {
+        return 1
+    }
+    if starts_at(src, i, "interface ") == 1 {
+        return 1
+    }
+    if starts_at(src, i, "impl ") == 1 {
+        return 1
+    }
+    if starts_at(src, i, "abstract ") == 1 {
+        return 1
+    }
+    if starts_at(src, i, "trait ") == 1 {
+        return 1
+    }
+    if starts_at(src, i, "module ") == 1 {
+        return 1
+    }
+    if starts_at(src, i, "export ") == 1 {
+        return 1
+    }
+    if starts_at(src, i, "static ") == 1 {
+        return 1
+    }
+    if starts_at(src, i, "namespace ") == 1 {
+        return 1
+    }
+    if starts_at(src, i, "package ") == 1 {
+        return 1
+    }
+    if starts_at(src, i, "typedef") == 1 {
+        return 1
+    }
+    if starts_at(src, i, "using ") == 1 {
+        return 1
+    }
+    if starts_at(src, i, "union ") == 1 {
+        return 1
+    }
+    if starts_at(src, i, "object ") == 1 {
+        return 1
+    }
+    if starts_at(src, i, "val ") == 1 {
+        return 1
+    }
+    return 0
+}
+
+// trim: drop trailing spaces/tabs/CR and cap the length at 100 bytes.
+function trim_sig(t: text) -> text {
+    var n = t.len
+    while n > 0 {
+        var c = t[n - 1]
+        if c == ' ' {
+            n = n - 1
+        } else if c == '\t' {
+            n = n - 1
+        } else if c == '\r' {
+            n = n - 1
+        } else {
+            break
+        }
+    }
+    if n > 100 {
+        n = 100
+    }
+    return slice(t, 0, n)
+}
+
+function count_lines(src: text) -> int {
+    var n = src.len
+    var lines = 1
+    var i = 0
+    while i < n {
+        if src[i] == '\n' {
+            lines = lines + 1
+        }
+        i = i + 1
+    }
+    return lines
+}
+
+function scan_file(s: &mut Stats, path: text, json: int, max: int) {
+    var src = read_file(path)
+    var n = src.len
+    var nlines = count_lines(src)
+    s.files = s.files + 1
+
+    if json == 1 {
+        var b = Builder()
+        b.add("{\"path\":\"")
+        b.add(json_escape(path))
+        b.add("\",\"lines\":")
+        b.add(to_text(nlines))
+        b.add(",\"decls\":[")
+        var first = 1
+        var i = 0
+        var line = 1
+        while i < n {
+            var j = i
+            while j < n {
+                if src[j] == '\n' {
+                    break
+                }
+                j = j + 1
+            }
+            if is_decl_line(src, i) == 1 {
+                if max > 0 && s.decls >= max {
+                    s.trunc = 1
+                } else {
+                    var sig = trim_sig(slice(src, i, j))
+                    if first == 1 {
+                        first = 0
+                    } else {
+                        b.add(",")
+                    }
+                    b.add("{\"line\":")
+                    b.add(to_text(line))
+                    b.add(",\"sig\":\"")
+                    b.add(json_escape(sig))
+                    b.add("\"}")
+                    s.decls = s.decls + 1
+                }
+            }
+            i = j + 1
+            line = line + 1
+        }
+        b.add("]}")
+        print(b.build())
+        return
+    }
+
+    print(path + "  (" + to_text(nlines) + " lines)")
+    var i = 0
+    var line = 1
+    while i < n {
+        var j = i
+        while j < n {
+            if src[j] == '\n' {
+                break
+            }
+            j = j + 1
+        }
+        if is_decl_line(src, i) == 1 {
+            if max > 0 && s.decls >= max {
+                s.trunc = 1
+            } else {
+                var sig = trim_sig(slice(src, i, j))
+                print("  " + to_text(line) + ": " + sig)
+                s.decls = s.decls + 1
+            }
+        }
+        i = j + 1
+        line = line + 1
+    }
+}
+
+function walk(s: &mut Stats, dir: text, json: int, max: int) {
+    var names = read_dir(dir)
+    var n = names.len
+    var i = 0
+    while i < n {
+        var name = names[i]
+        var p = dir + "/" + name
+        if is_dir(p) {
+            if is_skip(name) == 0 {
+                walk(s, p, json, max)
+            }
+        } else if is_source(name) == 1 {
+            scan_file(s, p, json, max)
+        }
+        i = i + 1
+    }
+}
+
+function usage() {
+    eprint("usage: brickctx <dir> [--max-lines N] [--json]")
+}
+
+function main() {
+    var argv = args()
+    var val_flags = List(text)
+    val_flags.push("--max-lines")
+    var pos = positionals(argv, val_flags)
+    if pos.len == 0 {
+        usage()
+        exit(2)
+    }
+    var dir = pos[0]
+
+    var json = 0
+    if has_flag(argv, "--json") {
+        json = 1
+    }
+    var max = flag_int(argv, "--max-lines", 0)
+
+    var s = Stats{ files: 0, decls: 0, trunc: 0 }
+    if json == 0 {
+        print("# brickctx " + dir)
+    }
+    walk(&mut s, dir, json, max)
+    if json == 0 {
+        var foot = "# " + to_text(s.files) + " files, " + to_text(s.decls) + " decls"
+        if s.trunc == 1 {
+            foot = foot + " (truncated)"
+        }
+        print(foot)
+    }
+}

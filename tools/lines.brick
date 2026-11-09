@@ -1,0 +1,89 @@
+import "../std/strings"
+
+function main() {
+    var argv = args()
+    if argv.len < 2 {
+        eprint("usage: lines [file] <start-line> [end-line]  (1-based)")
+        exit(2)
+    }
+
+    var file = "-"
+    var start = 1
+    var end = 1
+    var has_end = false
+
+    if argv[1] == "-" || is_digit(argv[1][0]) {
+        file = "-"
+        if argv[1] == "-" {
+            if argv.len < 3 {
+                eprint("usage: lines [file] <start-line> [end-line]  (1-based)")
+                exit(2)
+            }
+            start = parse_int(argv[2])
+            end = start
+            if argv.len >= 4 {
+                end = parse_int(argv[3])
+                has_end = true
+            }
+        } else {
+            start = parse_int(argv[1])
+            end = start
+            if argv.len >= 3 {
+                end = parse_int(argv[2])
+                has_end = true
+            }
+        }
+    } else {
+        if argv.len < 3 {
+            eprint("usage: lines [file] <start-line> [end-line]  (1-based)")
+            exit(2)
+        }
+        file = argv[1]
+        start = parse_int(argv[2])
+        end = start
+        if argv.len >= 4 {
+            end = parse_int(argv[3])
+            has_end = true
+        }
+    }
+
+    var src = read_file(file)
+    var n = src.len
+
+    var out = Builder()
+    var line = 1
+    var i = 0
+    var line_start = 0
+    var done = false
+    while i < n {
+        var c = src[i]
+        if c == '\n' {
+            var emit = line >= start
+            if has_end {
+                if line > end { emit = false }
+            }
+            if emit && done == false {
+                out.add(slice(src, line_start, i))
+                out.add("\n")
+            }
+            if has_end && line >= end {
+                done = true
+                break
+            }
+            line = line + 1
+            line_start = i + 1
+        }
+        i = i + 1
+    }
+    // last line if the file has no trailing newline
+    if line_start < n && done == false {
+        var emit = line >= start
+        if has_end {
+            if line > end { emit = false }
+        }
+        if emit {
+            out.add(slice(src, line_start, n))
+        }
+    }
+    print(out.build())
+}

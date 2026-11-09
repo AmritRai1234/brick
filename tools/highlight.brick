@@ -1,0 +1,297 @@
+// tools/highlight.brick — Syntax colorizer for Brick and C-like source code.
+//
+// Usage:
+//   highlight <file> [-n] [--html]
+//   cat file.brick | highlight [-n] [--html]
+
+import "../std/strings"
+import "../std/flags"
+
+function esc_code() -> text {
+    var b = List(int)
+    b.push(27)
+    return to_text(bytes(b))
+}
+
+function is_keyword(w: text) -> bool {
+    return w == "function" || w == "var" || w == "if" || w == "else" ||
+    w == "while" || w == "for" || w == "in" || w == "return" ||
+    w == "struct" || w == "enum" || w == "match" || w == "const" ||
+    w == "import" || w == "arena" || w == "extern" || w == "break" ||
+    w == "continue"
+}
+
+function is_type(w: text) -> bool {
+    return w == "int" || w == "float" || w == "bool" || w == "text" ||
+    w == "bytes" || w == "void" || w == "List" || w == "Map" ||
+    w == "Builder"
+}
+
+function is_builtin(w: text) -> bool {
+    return w == "print" || w == "print_bytes" || w == "eprint" ||
+    w == "exit" || w == "system" || w == "getenv" ||
+    w == "read_dir" || w == "is_dir" || w == "read_file" ||
+    w == "write_file" || w == "slice" || w == "args" ||
+    w == "to_text" || w == "to_bytes" || w == "true" || w == "false"
+}
+
+function is_ident_start(c: int) -> bool {
+    return is_alpha(c) || c == '_'
+}
+
+function is_ident_char(c: int) -> bool {
+    return is_alnum(c) || c == '_'
+}
+
+function html_escape(t: text) -> text {
+    var out = Builder()
+    var i = 0
+    while i < t.len {
+        var c = t[i]
+        if c == '&' {
+            out.add("&amp;")
+        } else if c == '<' {
+            out.add("&lt;")
+        } else if c == '>' {
+            out.add("&gt;")
+        } else if c == '"' {
+        out.add("&quot;")
+    } else {
+        out.add(slice(t, i, i + 1))
+    }
+    i = i + 1
+}
+return out.build()
+}
+
+function wrap(t: text, kind: text, html: bool, esc: text) -> text {
+    if t.len == 0 {
+        return ""
+    }
+    if html {
+        var escaped = html_escape(t)
+        if kind == "kw" {
+            return "<span style=\"color:#c586c0;font-weight:bold\">" + escaped + "</span>"
+        } else if kind == "type" {
+            return "<span style=\"color:#4ec9b0\">" + escaped + "</span>"
+        } else if kind == "fn" {
+            return "<span style=\"color:#dcdcaa\">" + escaped + "</span>"
+        } else if kind == "str" {
+            return "<span style=\"color:#ce9178\">" + escaped + "</span>"
+        } else if kind == "num" {
+            return "<span style=\"color:#b5cea8\">" + escaped + "</span>"
+        } else if kind == "comment" {
+            return "<span style=\"color:#6a9955;font-style:italic\">" + escaped + "</span>"
+        } else if kind == "op" {
+            return "<span style=\"color:#569cd6\">" + escaped + "</span>"
+        } else {
+            return escaped
+        }
+    }
+
+    // Terminal ANSI Colors
+    var reset = esc + "[0m"
+    if kind == "kw" {
+        return esc + "[1;35m" + t + reset       // Bold Magenta
+    } else if kind == "type" {
+        return esc + "[1;36m" + t + reset       // Bold Cyan
+    } else if kind == "fn" {
+        return esc + "[1;34m" + t + reset       // Bold Blue
+    } else if kind == "str" {
+        return esc + "[32m" + t + reset         // Green
+    } else if kind == "num" {
+        return esc + "[33m" + t + reset         // Yellow
+    } else if kind == "comment" {
+        return esc + "[90m" + t + reset         // Bright Black (Gray)
+    } else if kind == "op" {
+        return esc + "[36m" + t + reset         // Cyan
+    }
+    return t
+}
+
+function main() {
+    var argv = args()
+    var val_flags = List(text)
+    var pos = positionals(argv, val_flags)
+
+    var file = "-"
+    if pos.len > 0 {
+        file = pos[0]
+    }
+
+    var html_mode = has_flag(argv, "--html")
+    var line_numbers = has_flag(argv, "-n") || has_flag(argv, "--numbers")
+
+    var src = read_file(file)
+    var n = src.len
+    var esc = esc_code()
+    var out = Builder()
+
+    if html_mode {
+        out.add("<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>Brick Source</title>")
+        out.add("<style>body{background:#1e1e1e;color:#d4d4d4;font-family:'Courier New',monospace;padding:16px;line-height:1.4}pre{margin:0}</style>")
+        out.add("</head><body><pre><code>")
+    }
+
+    var i = 0
+    var line_num = 1
+    var at_line_start = true
+
+    while i < n {
+        if at_line_start && line_numbers {
+            var num_str = pad_left(to_text(line_num), 4, " ")
+            if html_mode {
+                out.add("<span style=\"color:#858585\">" + num_str + " │ </span>")
+            } else {
+                out.add(esc + "[90m" + num_str + " │ " + esc + "[0m")
+            }
+            at_line_start = false
+        }
+
+        var c = src[i]
+
+        // Newline
+        if c == '\n' {
+            out.add("\n")
+            line_num = line_num + 1
+            at_line_start = true
+            i = i + 1
+            continue
+        }
+
+        // Single-line comment: // ...
+        if c == '/' && i + 1 < n && src[i + 1] == '/' {
+            var start = i
+            while i < n && src[i] != '\n' {
+                i = i + 1
+            }
+            var comment_text = slice(src, start, i)
+            out.add(wrap(comment_text, "comment", html_mode, esc))
+            continue
+        }
+
+        // String literal: "..."
+        if c == '"' {
+        var start = i
+        i = i + 1
+        while i < n && src[i] != '"' {
+        if src[i] == '\\' && i + 1 < n {
+            i = i + 1
+        }
+        i = i + 1
+    }
+    if i < n && src[i] == '"' {
+    i = i + 1
+}
+var str_text = slice(src, start, i)
+out.add(wrap(str_text, "str", html_mode, esc))
+continue
+}
+
+// Character literal: '...'
+if c == '\'' {
+    var start = i
+    i = i + 1
+    while i < n && src[i] != '\'' {
+        if src[i] == '\\' && i + 1 < n {
+            i = i + 1
+        }
+        i = i + 1
+    }
+    if i < n && src[i] == '\'' {
+        i = i + 1
+    }
+    var char_text = slice(src, start, i)
+    out.add(wrap(char_text, "str", html_mode, esc))
+    continue
+}
+
+// Numbers: 0-9
+if is_digit(c) {
+    var start = i
+    while i < n && (is_digit(src[i]) || src[i] == '.') {
+        i = i + 1
+    }
+    var num_text = slice(src, start, i)
+    out.add(wrap(num_text, "num", html_mode, esc))
+    continue
+}
+
+// Identifiers and keywords
+if is_ident_start(c) {
+    var start = i
+    while i < n && is_ident_char(src[i]) {
+        i = i + 1
+    }
+    var word = slice(src, start, i)
+
+    // Peek for function call: foo(...)
+    var peek = i
+    while peek < n && (src[peek] == ' ' || src[peek] == '\t') {
+        peek = peek + 1
+    }
+    var is_call = (peek < n && src[peek] == '(')
+
+    if is_keyword(word) {
+        out.add(wrap(word, "kw", html_mode, esc))
+    } else if is_type(word) {
+        out.add(wrap(word, "type", html_mode, esc))
+    } else if is_builtin(word) {
+        out.add(wrap(word, "fn", html_mode, esc))
+    } else if is_call {
+        out.add(wrap(word, "fn", html_mode, esc))
+    } else {
+        out.add(wrap(word, "ident", html_mode, esc))
+    }
+    continue
+}
+
+// &mut borrow operator
+if c == '&' && i + 3 < n && slice(src, i, i + 4) == "&mut" {
+    out.add(wrap("&mut", "kw", html_mode, esc))
+    i = i + 4
+    continue
+}
+
+// Multi-char operators: ->, =>, !=, ==, <=, >=, &&, ||
+if (c == '-' && i + 1 < n && src[i + 1] == '>') ||
+(c == '=' && i + 1 < n && src[i + 1] == '>') ||
+(c == '=' && i + 1 < n && src[i + 1] == '=') ||
+(c == '!' && i + 1 < n && src[i + 1] == '=') ||
+(c == '<' && i + 1 < n && src[i + 1] == '=') ||
+(c == '>' && i + 1 < n && src[i + 1] == '=') ||
+(c == '&' && i + 1 < n && src[i + 1] == '&') ||
+(c == '|' && i + 1 < n && src[i + 1] == '|') {
+    var op_text = slice(src, i, i + 2)
+    out.add(wrap(op_text, "op", html_mode, esc))
+    i = i + 2
+    continue
+}
+
+// Single punctuation & operators
+if c == '{' || c == '}' || c == '(' || c == ')' ||
+c == '[' || c == ']' || c == ';' || c == ':' ||
+c == ',' || c == '+' || c == '-' || c == '*' ||
+c == '/' || c == '%' || c == '!' || c == '&' ||
+c == '=' || c == '.' {
+    var op_char = slice(src, i, i + 1)
+    out.add(wrap(op_char, "op", html_mode, esc))
+    i = i + 1
+    continue
+}
+
+// Normal character / whitespace
+if html_mode {
+    out.add(html_escape(slice(src, i, i + 1)))
+} else {
+    out.add(slice(src, i, i + 1))
+}
+i = i + 1
+}
+
+if html_mode {
+    out.add("</code></pre></body></html>\n")
+}
+
+print(out.build())
+}
