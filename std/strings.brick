@@ -1,0 +1,364 @@
+// std/strings — text processing utilities for Brick.
+
+// ---- character classification ----
+
+function is_space(c: int) -> bool {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r'
+}
+
+function is_digit(c: int) -> bool {
+    return c >= '0' && c <= '9'
+}
+
+function is_alpha(c: int) -> bool {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+}
+
+function is_alnum(c: int) -> bool {
+    return is_alpha(c) || is_digit(c)
+}
+
+// ---- searching ----
+
+function index_of(haystack: text, needle: text) -> int {
+    if needle.len == 0 {
+        return 0
+    }
+    if needle.len > haystack.len {
+        return 0 - 1
+    }
+    var limit = haystack.len - needle.len
+    var i = 0
+    while i <= limit {
+        var j = 0
+        var is_eq = true
+        while j < needle.len {
+            if haystack[i + j] != needle[j] {
+                is_eq = false
+                break
+            }
+            j = j + 1
+        }
+        if is_eq {
+            return i
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+function contains(haystack: text, needle: text) -> bool {
+    return index_of(haystack, needle) >= 0
+}
+
+function starts_with(t: text, prefix: text) -> bool {
+    if prefix.len > t.len {
+        return false
+    }
+    var i = 0
+    while i < prefix.len {
+        if t[i] != prefix[i] {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+function ends_with(t: text, suffix: text) -> bool {
+    if suffix.len > t.len {
+        return false
+    }
+    var offset = t.len - suffix.len
+    var i = 0
+    while i < suffix.len {
+        if t[offset + i] != suffix[i] {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+// ---- trimming ----
+
+function trim_left(t: text) -> text {
+    var i = 0
+    while i < t.len {
+        if is_space(t[i]) == false {
+            return slice(t, i, t.len)
+        }
+        i = i + 1
+    }
+    return ""
+}
+
+function trim_right(t: text) -> text {
+    var i = t.len
+    while i > 0 {
+        if is_space(t[i - 1]) == false {
+            return slice(t, 0, i)
+        }
+        i = i - 1
+    }
+    return ""
+}
+
+function trim(t: text) -> text {
+    return trim_right(trim_left(t))
+}
+
+// ---- case conversion ----
+
+function to_lower(t: text) -> text {
+    var codes = List(int)
+    var i = 0
+    while i < t.len {
+        var c = t[i]
+        if c >= 'A' && c <= 'Z' {
+            codes.push(c + 32)
+        } else {
+            codes.push(c)
+        }
+        i = i + 1
+    }
+    return to_text(bytes(codes))
+}
+
+function to_upper(t: text) -> text {
+    var codes = List(int)
+    var i = 0
+    while i < t.len {
+        var c = t[i]
+        if c >= 'a' && c <= 'z' {
+            codes.push(c - 32)
+        } else {
+            codes.push(c)
+        }
+        i = i + 1
+    }
+    return to_text(bytes(codes))
+}
+
+// ---- splitting and joining ----
+
+function split(t: text, sep: text) -> List(text) {
+    var parts = List(text)
+    if sep.len == 0 {
+        parts.push(t)
+        return parts
+    }
+    var start = 0
+    var i = 0
+    var limit = t.len - sep.len
+    while i <= limit {
+        var j = 0
+        var is_eq = true
+        while j < sep.len {
+            if t[i + j] != sep[j] {
+                is_eq = false
+                break
+            }
+            j = j + 1
+        }
+        if is_eq {
+            parts.push(slice(t, start, i))
+            i = i + sep.len
+            start = i
+        } else {
+            i = i + 1
+        }
+    }
+    parts.push(slice(t, start, t.len))
+    return parts
+}
+
+function join(parts: List(text), sep: text) -> text {
+    var out = Builder()
+    var i = 0
+    while i < parts.len {
+        if i > 0 {
+            out.add(sep)
+        }
+        out.add(parts[i])
+        i = i + 1
+    }
+    return out.build()
+}
+
+// ---- replacing ----
+
+function replace(t: text, old: text, replacement: text) -> text {
+    if old.len == 0 {
+        return t
+    }
+    var out = Builder()
+    var i = 0
+    while i < t.len {
+        if i + old.len <= t.len {
+            var j = 0
+            var is_eq = true
+            while j < old.len {
+                if t[i + j] != old[j] {
+                    is_eq = false
+                    break
+                }
+                j = j + 1
+            }
+            if is_eq {
+                out.add(replacement)
+                i = i + old.len
+                continue
+            }
+        }
+        out.add(slice(t, i, i + 1))
+        i = i + 1
+    }
+    return out.build()
+}
+
+// ---- building ----
+
+function repeat(t: text, n: int) -> text {
+    var out = Builder()
+    var i = 0
+    while i < n {
+        out.add(t)
+        i = i + 1
+    }
+    return out.build()
+}
+
+function count(haystack: text, needle: text) -> int {
+    if needle.len == 0 || haystack.len < needle.len {
+        return 0
+    }
+    var total = 0
+    var i = 0
+    var limit = haystack.len - needle.len
+    while i <= limit {
+        var j = 0
+        var is_eq = true
+        while j < needle.len {
+            if haystack[i + j] != needle[j] {
+                is_eq = false
+                break
+            }
+            j = j + 1
+        }
+        if is_eq {
+            total = total + 1
+            i = i + needle.len
+        } else {
+            i = i + 1
+        }
+    }
+    return total
+}
+
+function pad_left(t: text, width: int, pad: text) -> text {
+    if t.len >= width || pad.len == 0 {
+        return t
+    }
+    var out = Builder()
+    var needed = width - t.len
+    while needed > 0 {
+        if needed < pad.len {
+            out.add(slice(pad, 0, needed))
+            break
+        }
+        out.add(pad)
+        needed = needed - pad.len
+    }
+    out.add(t)
+    return out.build()
+}
+
+function pad_right(t: text, width: int, pad: text) -> text {
+    if t.len >= width || pad.len == 0 {
+        return t
+    }
+    var out = Builder()
+    out.add(t)
+    var needed = width - t.len
+    while needed > 0 {
+        if needed < pad.len {
+            out.add(slice(pad, 0, needed))
+            break
+        }
+        out.add(pad)
+        needed = needed - pad.len
+    }
+    return out.build()
+}
+
+function lines(t: text) -> List(text) {
+    var res = List(text)
+    var n = t.len
+    var start = 0
+    var i = 0
+    while i < n {
+        if t[i] == '\n' {
+            var end_pos = i
+            if end_pos > start && t[end_pos - 1] == '\r' {
+                end_pos = end_pos - 1
+            }
+            res.push(slice(t, start, end_pos))
+            start = i + 1
+        }
+        i = i + 1
+    }
+    if start < n {
+        res.push(slice(t, start, n))
+    }
+    return res
+}
+
+function json_escape(t: text) -> text {
+    var out = Builder()
+    var n = t.len
+    var i = 0
+    while i < n {
+        var c = t[i]
+        if c == '\\' {
+            out.add("\\\\")
+        } else if c == '"' {
+            out.add("\\\"")
+        } else if c == '\n' {
+            out.add("\\n")
+        } else if c == '\t' {
+            out.add("\\t")
+        } else if c == '\r' {
+            out.add("\\r")
+        } else {
+            out.add(slice(t, i, i + 1))
+        }
+        i = i + 1
+    }
+    return out.build()
+}
+
+// ---- conversion ----
+
+function parse_int(t: text) -> int {
+    var n = t.len
+    var v = 0
+    var i = 0
+    var neg = false
+    if n > 0 && t[0] == '-' {
+        neg = true
+        i = 1
+    }
+    while i < n {
+        var c = t[i]
+        if c >= '0' && c <= '9' {
+            v = v * 10 + (c - '0')
+        }
+        i = i + 1
+    }
+    if neg {
+        return 0 - v
+    }
+    return v
+}
+

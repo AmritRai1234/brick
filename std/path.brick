@@ -1,0 +1,68 @@
+// std/path — file path utilities for Brick.
+//
+// All paths use '/' as the separator (Unix-style).
+
+import "strings"
+
+function basename(path: text) -> text {
+    var last = 0 - 1
+    var i = 0
+    while i < path.len {
+        if path[i] == '/' {
+            last = i
+        }
+        i = i + 1
+    }
+    if last < 0 {
+        return path
+    }
+    return slice(path, last + 1, path.len)
+}
+
+function dirname(path: text) -> text {
+    var last = 0 - 1
+    var i = 0
+    while i < path.len {
+        if path[i] == '/' {
+            last = i
+        }
+        i = i + 1
+    }
+    if last < 0 {
+        return "."
+    }
+    if last == 0 {
+        return "/"
+    }
+    return slice(path, 0, last)
+}
+
+function extension(path: text) -> text {
+    var base = basename(path)
+    var last = 0 - 1
+    var i = 0
+    while i < base.len {
+        if base[i] == '.' {
+            last = i
+        }
+        i = i + 1
+    }
+    if last <= 0 {
+        return ""
+    }
+    return slice(base, last, base.len)
+}
+
+function join_path(a: text, b: text) -> text {
+    if a.len == 0 {
+        return b
+    }
+    if b.len == 0 {
+        return a
+    }
+    if a[a.len - 1] == '/' {
+        return a + b
+    }
+    return a + "/" + b
+}
+

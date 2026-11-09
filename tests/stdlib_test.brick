@@ -1,0 +1,164 @@
+// Test the standard library.
+import "../std/strings"
+import "../std/math"
+import "../std/path"
+import "../std/flags"
+
+function assert(cond: bool, msg: text) {
+    if cond == false {
+        eprint("FAIL: " + msg)
+        exit(1)
+    }
+}
+
+function main() {
+    // ---- strings: character classification ----
+    assert(is_digit('5'), "is_digit 5")
+    assert(is_digit('a') == false, "is_digit a")
+    assert(is_alpha('z'), "is_alpha z")
+    assert(is_alpha('3') == false, "is_alpha 3")
+    assert(is_space(' '), "is_space space")
+    assert(is_space('x') == false, "is_space x")
+    assert(is_alnum('a'), "is_alnum a")
+    assert(is_alnum('3'), "is_alnum 3")
+    assert(is_alnum(' ') == false, "is_alnum space")
+
+    // ---- strings: searching ----
+    assert(index_of("hello world", "world") == 6, "index_of found")
+    assert(index_of("hello", "xyz") == 0 - 1, "index_of not found")
+    assert(index_of("hello", "") == 0, "index_of empty needle")
+    assert(contains("hello world", "world"), "contains yes")
+    assert(contains("hello", "xyz") == false, "contains no")
+    assert(starts_with("hello", "hel"), "starts_with yes")
+    assert(starts_with("hello", "world") == false, "starts_with no")
+    assert(starts_with("hi", "hello") == false, "starts_with too long")
+    assert(ends_with("hello", "llo"), "ends_with yes")
+    assert(ends_with("hello", "hel") == false, "ends_with no")
+
+    // ---- strings: trimming ----
+    assert(trim("  hello  ") == "hello", "trim")
+    assert(trim_left("  hello  ") == "hello  ", "trim_left")
+    assert(trim_right("  hello  ") == "  hello", "trim_right")
+    assert(trim("   ") == "", "trim all spaces")
+    assert(trim("hello") == "hello", "trim no spaces")
+
+    // ---- strings: case ----
+    assert(to_lower("Hello World") == "hello world", "to_lower")
+    assert(to_upper("Hello World") == "HELLO WORLD", "to_upper")
+    assert(to_lower("abc123") == "abc123", "to_lower no change")
+
+    // ---- strings: split/join ----
+    var parts = split("a,b,c", ",")
+    assert(parts.len == 3, "split len")
+    assert(parts[0] == "a", "split 0")
+    assert(parts[1] == "b", "split 1")
+    assert(parts[2] == "c", "split 2")
+    assert(join(parts, "-") == "a-b-c", "join")
+
+    var parts2 = split("hello", ",")
+    assert(parts2.len == 1, "split no sep")
+    assert(parts2[0] == "hello", "split no sep val")
+
+    var parts3 = split(",a,,b,", ",")
+    assert(parts3.len == 5, "split empty parts len")
+    assert(parts3[0] == "", "split empty first")
+    assert(parts3[2] == "", "split empty middle")
+    assert(parts3[4] == "", "split empty last")
+
+    // ---- strings: replace ----
+    assert(replace("hello world", "world", "brick") == "hello brick", "replace")
+    assert(replace("aaa", "a", "bb") == "bbbbbb", "replace all")
+    assert(replace("hello", "xyz", "!") == "hello", "replace no match")
+
+    // ---- strings: repeat ----
+    assert(repeat("ab", 3) == "ababab", "repeat")
+    assert(repeat("x", 0) == "", "repeat 0")
+
+    // ---- strings: count ----
+    assert(count("hello world", "l") == 3, "count l")
+    assert(count("banana", "an") == 2, "count an")
+    assert(count("aaaa", "aa") == 2, "count aa non-overlapping")
+    assert(count("hello", "z") == 0, "count not found")
+
+    // ---- strings: padding ----
+    assert(pad_left("42", 5, "0") == "00042", "pad_left")
+    assert(pad_right("hi", 5, " ") == "hi   ", "pad_right")
+    assert(pad_left("longer", 4, " ") == "longer", "pad_left no truncate")
+
+    // ---- strings: lines ----
+    var lns = lines("first\nsecond\r\nthird")
+    assert(lns.len == 3, "lines len")
+    assert(lns[0] == "first", "lines 0")
+    assert(lns[1] == "second", "lines 1")
+    assert(lns[2] == "third", "lines 2")
+
+    // ---- strings: json_escape ----
+    assert(json_escape("hello \"world\"\n") == "hello \\\"world\\\"\\n", "json_escape")
+
+    // ---- strings: parse_int ----
+    assert(parse_int("42") == 42, "parse_int")
+    assert(parse_int("-7") == 0 - 7, "parse_int neg")
+    assert(parse_int("0") == 0, "parse_int zero")
+
+    // ---- math ----
+    assert(abs(5) == 5, "abs pos")
+    assert(abs(0 - 5) == 5, "abs neg")
+    assert(min(3, 7) == 3, "min")
+    assert(max(3, 7) == 7, "max")
+    assert(clamp(5, 1, 10) == 5, "clamp mid")
+    assert(clamp(0, 1, 10) == 1, "clamp lo")
+    assert(clamp(99, 1, 10) == 10, "clamp hi")
+    assert(abs_float(0.0 - 3.14) == 3.14, "abs_float")
+    assert(min_float(1.5, 2.5) == 1.5, "min_float")
+    assert(max_float(1.5, 2.5) == 2.5, "max_float")
+    assert(clamp_float(5.5, 1.0, 10.0) == 5.5, "clamp_float")
+
+    // ---- path ----
+    assert(basename("/home/user/file.txt") == "file.txt", "basename")
+    assert(basename("file.txt") == "file.txt", "basename no dir")
+    assert(dirname("/home/user/file.txt") == "/home/user", "dirname")
+    assert(dirname("file.txt") == ".", "dirname no dir")
+    assert(dirname("/file.txt") == "/", "dirname root")
+    assert(extension("file.txt") == ".txt", "extension")
+    assert(extension("file") == "", "extension none")
+    assert(extension(".hidden") == "", "extension dotfile")
+    assert(join_path("/home", "user") == "/home/user", "join_path")
+    assert(join_path("/home/", "user") == "/home/user", "join_path trailing slash")
+    assert(join_path("", "user") == "user", "join_path empty a")
+    assert(join_path("/home", "") == "/home", "join_path empty b")
+
+    // ---- flags ----
+    var mock_argv = List(text)
+    mock_argv.push("program")
+    mock_argv.push("-v")
+    mock_argv.push("--out")
+    mock_argv.push("file.txt")
+    mock_argv.push("--count=42")
+    mock_argv.push("input.brick")
+    mock_argv.push("--")
+    mock_argv.push("-literal-dash")
+
+    assert(has_flag(mock_argv, "-v"), "flags has -v")
+    assert(has_flag(mock_argv, "--quiet") == false, "flags has --quiet")
+    assert(flag_value(mock_argv, "--out", "default") == "file.txt", "flags --out")
+    assert(flag_value(mock_argv, "--missing", "default") == "default", "flags --missing")
+    assert(flag_value(mock_argv, "--count", "0") == "42", "flags --count=")
+    assert(flag_int(mock_argv, "--count", 0) == 42, "flags flag_int")
+    assert(flag_int(mock_argv, "--absent", 99) == 99, "flags flag_int absent")
+
+    var val_flags = List(text)
+    val_flags.push("--out")
+    var pos = positionals(mock_argv, val_flags)
+    assert(pos.len == 2, "positionals len")
+    assert(pos[0] == "input.brick", "pos 0")
+    assert(pos[1] == "-literal-dash", "pos 1 after --")
+
+    var stdin_argv = List(text)
+    stdin_argv.push("program")
+    stdin_argv.push("-")
+    var pos_stdin = positionals(stdin_argv, val_flags)
+    assert(pos_stdin.len == 1, "stdin dash pos len")
+    assert(pos_stdin[0] == "-", "stdin dash pos val")
+
+    print("all tests passed")
+}
