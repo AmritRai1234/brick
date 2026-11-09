@@ -507,7 +507,7 @@ func linkBinary(kind, src, out, sourceFile string) {
 		cfile := tempPath("brick-*.c")
 		defer os.Remove(cfile)
 		writeFile(cfile, src)
-		args := []string{"-std=c11", "-O2", "-Wall", "-Wno-unused-parameter", cfile}
+		args := []string{"-std=c11", "-O2", "-Wall", "-Wno-unused-parameter", "-Wno-unused-function", cfile}
 		args = append(args, extra...)
 		args = append(args, "-o", out)
 		run(cc(), args...)

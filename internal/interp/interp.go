@@ -766,7 +766,12 @@ func (in *interp) evalCall(ex *ast.CallExpr, env *Env) (Value, error) {
 			if err != nil {
 				return nil, err
 			}
-			data, err := os.ReadFile(p)
+			var data []byte
+			if p == "-" {
+				data, err = io.ReadAll(os.Stdin)
+			} else {
+				data, err = os.ReadFile(p)
+			}
 			if err != nil {
 				return nil, &RuntimeError{Msg: "cannot read " + p, Line: ex.Line, Col: ex.Col}
 			}

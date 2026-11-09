@@ -1,10 +1,22 @@
-.PHONY: build test fmt fmt-check vet clean examples native diff interp selfhost selfhost-e2e bootstrap backup bench bench-server
+.PHONY: build test test-std tools fmt fmt-check vet clean examples native diff interp selfhost selfhost-e2e bootstrap backup bench bench-server
 
 build:
 	go build -o bin/brick ./cmd/brick
 
 test:
 	go test ./...
+	@$(MAKE) test-std
+
+test-std: build
+	@./bin/brick diff tests/stdlib_test.brick
+
+tools: build
+	@mkdir -p bin
+	@./bin/brick build tools/lines.brick -o bin/lines
+	@./bin/brick build tools/jsonfmt.brick -o bin/jsonfmt
+	@./bin/brick build tools/brickctx.brick -o bin/brickctx
+	@./bin/brick build tools/highlight.brick -o bin/highlight
+	@echo "tools built in bin/: lines, jsonfmt, brickctx, highlight"
 
 fmt:
 	gofmt -w .

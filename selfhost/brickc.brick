@@ -179,6 +179,7 @@ function main() {
     cmd.push("-O2")
     cmd.push("-Wall")
     cmd.push("-Wno-unused-parameter")
+    cmd.push("-Wno-unused-function")
     cmd.push(cfile)
     var extra = companionC(input)
     var j = 0

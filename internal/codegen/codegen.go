@@ -604,22 +604,53 @@ static inline char *brick_read_file(const char *path)
     long   size;
     char  *buffer;
     size_t got;
+    size_t cap;
+    size_t len;
+    size_t n;
 
-    file = fopen(path, "rb");
-    if (file == NULL) {
-        fprintf(stderr, "brick: cannot open %s\n", path);
-        exit(1);
+    if (strcmp(path, "-") == 0) {
+        file = stdin;
+    } else {
+        file = fopen(path, "rb");
+        if (file == NULL) {
+            fprintf(stderr, "brick: cannot open %s\n", path);
+            exit(1);
+        }
     }
-    fseek(file, 0, SEEK_END);
-    size = ftell(file);
-    fseek(file, 0, SEEK_SET);
-    buffer = malloc((size_t)size + 1);
+    if (file != stdin && fseek(file, 0, SEEK_END) == 0) {
+        size = ftell(file);
+        if (size >= 0) {
+            fseek(file, 0, SEEK_SET);
+            buffer = malloc((size_t)size + 1);
+            if (buffer == NULL) {
+                brick_panic_memory();
+            }
+            got = fread(buffer, 1, (size_t)size, file);
+            buffer[got] = '\0';
+            fclose(file);
+            return buffer;
+        }
+    }
+    cap = 4096;
+    len = 0;
+    buffer = malloc(cap);
     if (buffer == NULL) {
         brick_panic_memory();
     }
-    got = fread(buffer, 1, (size_t)size, file);
-    buffer[got] = '\0';
-    fclose(file);
+    while ((n = fread(buffer + len, 1, cap - len - 1, file)) > 0) {
+        len += n;
+        if (len + 1 >= cap) {
+            cap *= 2;
+            buffer = realloc(buffer, cap);
+            if (buffer == NULL) {
+                brick_panic_memory();
+            }
+        }
+    }
+    buffer[len] = '\0';
+    if (file != stdin) {
+        fclose(file);
+    }
     return buffer;
 }
 
