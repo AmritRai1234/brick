@@ -1,0 +1,36 @@
+# Project: Brick — a small systems language that compiles to C
+
+Brick compiles source -> tokens -> ast -> checked -> C -> native (gcc/clang).
+The Go compiler in `internal/` is the reference. `examples/*.brick` are runnable
+programs and the best syntax reference. Full spec: docs/SPEC.md.
+
+## Build & run (always use the built binary)
+- `make build`                     builds `./bin/brick`
+- `./bin/brick run FILE.brick [args]`   compile, link, run
+- `./bin/brick check FILE.brick`        typecheck only
+- `./bin/brick emit FILE.brick`         print the generated C
+- `./bin/brick fmt FILE.brick`          FORMAT FILE IN PLACE (always format new files)
+
+## Brick syntax cheat-sheet
+- `function name(a: int) -> int { return a }`
+- `var x = 0`            no implicit conversions; `to_text(n)` to make text
+- `if c { } else { }`  /  `while c { }`  /  `for item in list { }`
+- `struct P { x: int, y: int }`  construct `P{ x: 1, y: 2 }`, field `p.x`
+- `enum R { Ok(int), Err(text) }` then `match r { R.Ok(n) => .., R.Err(m) => .. }`
+- text: `s.len`, `s[i]` yields the byte as an int, `+` concatenates, `==` compares
+- char literals: `'a'`, `'\n'`, `'\''`, `'"'`  (a char literal is just its byte int)
+- `List(T)`: `.push(v)`, `.len`, `xs[i]` read/assign; `Map(text,int)`: `.has(k) .get(k) .set(k,v) .len`
+- builder (assemble text fast): `var b = Builder()` ; `b.add(text)` ; `b.add(to_text(n))` ; `b.build()` ; `b.len`
+- `slice(text, start, end) -> text`  extracts a byte range of a string
+- bytes: `to_bytes(text)`, `to_text(bytes)`, `bytes(List(int))`; iterating bytes yields ints
+- file I/O: `read_file(path) -> text`, `write_file(path, text)`
+- fs/sys: `read_dir(path)`, `is_dir(path)`, `getenv(name)`, `args() -> List(text)`, `system(List(text)) -> int`
+- `print(x)` adds a newline; `eprint(x)` writes to stderr; `print_bytes(bytes)` writes exact bytes, no newline
+- There is NO stdin builtin — read input with `read_file(path)`.
+- `exit(status)` stops the program with a status code.
+
+## Rules
+- Keep functions small; local reasoning only (no hidden allocation).
+- Cache `s.len` in a `var` when looping over a text: `.len` is a strlen, so calling
+  it every iteration is O(n^2).
+- After writing a `.brick` file, run `./bin/brick fmt FILE` and then compile it.
